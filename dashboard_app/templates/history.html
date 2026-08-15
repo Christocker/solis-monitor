@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}History — Solis Monitor{% endblock %}
+{% block nav_history %}active{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <h1>History</h1>
+    <div class="topbar-right">
+        <span id="history-status" class="last-update">Loading...</span>
+    </div>
+</div>
+
+<!-- Range selector -->
+<div class="range-bar">
+    <div class="range-buttons">
+        <button class="range-btn active" data-range="today">Today</button>
+        <button class="range-btn" data-range="yesterday">Yesterday</button>
+        <button class="range-btn" data-range="7d">7 Days</button>
+        <button class="range-btn" data-range="30d">30 Days</button>
+        <button class="range-btn" data-range="all">All</button>
+    </div>
+    <div class="range-custom" id="range-custom" style="display:none;">
+        <input type="date" id="custom-start">
+        <span>to</span>
+        <input type="date" id="custom-end">
+        <button class="range-btn apply" id="custom-apply">Apply</button>
+    </div>
+</div>
+
+<!-- Summary stats -->
+<div class="stat-grid history-stats" id="history-stats">
+    <div class="stat">
+        <span class="stat-label">PV Generation</span>
+        <div><span class="stat-value" id="stat-pv-kwh">--</span> <span class="stat-unit">kWh</span></div>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Avg PV Power</span>
+        <div><span class="stat-value" id="stat-pv-avg">--</span> <span class="stat-unit">W</span></div>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Peak PV Power</span>
+        <div><span class="stat-value" id="stat-pv-peak">--</span> <span class="stat-unit">W</span></div>
+    </div>
+    <div class="stat">
+        <span class="stat-label">Grid Time</span>
+        <div><span class="stat-value" id="stat-grid-time">--</span> <span class="stat-unit">min</span></div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="charts-grid">
+    <section class="card chart-card">
+        <header class="card-header">
+            <h2>PV Power</h2>
+            <span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span>
+        </header>
+        <div class="chart-wrap"><canvas id="chart-pv"></canvas></div>
+    </section>
+
+    <section class="card chart-card">
+        <header class="card-header">
+            <h2>Load Power</h2>
+            <span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span>
+        </header>
+        <div class="chart-wrap"><canvas id="chart-load"></canvas></div>
+    </section>
+
+    <section class="card chart-card">
+        <header class="card-header">
+            <h2>Battery SOC</h2>
+            <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
+        </header>
+        <div class="chart-wrap"><canvas id="chart-soc"></canvas></div>
+    </section>
+
+    <section class="card chart-card">
+        <header class="card-header">
+            <h2>Battery Power</h2>
+            <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
+        </header>
+        <div class="chart-legend">
+            <span><i class="legend-dot" style="background:#30d158"></i> Discharge</span>
+            <span><i class="legend-dot" style="background:#0a84ff"></i> Charge</span>
+        </div>
+        <div class="chart-wrap"><canvas id="chart-batt-power"></canvas></div>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/history.js') }}"></script>
+{% endblock %}

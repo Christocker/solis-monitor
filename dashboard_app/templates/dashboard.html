@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Solis Monitor{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <h1>Dashboard</h1>
+    <div class="topbar-right">
+        <span id="last-update" class="last-update">Last update: --</span>
+        <span id="demo-badge" class="demo-badge" style="display:none;">DEMO DATA</span>
+    </div>
+</div>
+
+<!-- System status banner -->
+<div id="status-banner" class="status-banner">
+    <span class="status-pill pill-waiting">
+        <span class="dot"></span> SYSTEM STATUS PENDING
+    </span>
+    <span id="grid-status-pill" class="status-pill pill-muted">
+        <span class="dot"></span> GRID --
+    </span>
+</div>
+
+<!-- Cards row -->
+<div class="cards">
+    <!-- Solar -->
+    <section class="card">
+        <header class="card-header">
+            <h2>Solar / PV</h2>
+            <span class="card-icon sun-icon">
+                <svg><use href="#i-sun"/></svg>
+            </span>
+        </header>
+        <div class="card-main">
+            <div class="big-value">
+                <span id="solar-power">--</span>
+                <span class="big-unit">W</span>
+            </div>
+            <div class="big-label">PV Power</div>
+        </div>
+        <div class="card-grid">
+            <div class="mini">
+                <span class="mini-label">PV1 Voltage</span>
+                <div><span class="mini-value" id="pv1-voltage">--</span><span class="mini-unit">V</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">PV1 Current</span>
+                <div><span class="mini-value" id="pv1-current">--</span><span class="mini-unit">A</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">PV2 Voltage</span>
+                <div><span class="mini-value" id="pv2-voltage">--</span><span class="mini-unit">V</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">PV2 Current</span>
+                <div><span class="mini-value" id="pv2-current">--</span><span class="mini-unit">A</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Battery -->
+    <section class="card">
+        <header class="card-header">
+            <h2>Battery</h2>
+            <span class="card-icon batt-icon">
+                <svg><use href="#i-battery"/></svg>
+            </span>
+        </header>
+        <div class="card-main">
+            <div class="big-value">
+                <span id="batt-soc">--</span>
+                <span class="big-unit">%</span>
+            </div>
+            <div class="big-label">State of Charge</div>
+        </div>
+        <div class="soc-bar">
+            <div id="soc-fill" class="soc-fill" style="width:0%"></div>
+        </div>
+        <div class="card-grid">
+            <div class="mini">
+                <span class="mini-label">Voltage</span>
+                <div><span class="mini-value" id="batt-voltage">--</span><span class="mini-unit">V</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">Current</span>
+                <div><span class="mini-value" id="batt-current">--</span><span class="mini-unit">A</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">Power</span>
+                <div><span class="mini-value" id="batt-power">--</span><span class="mini-unit">W</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">SOH</span>
+                <div><span class="mini-value" id="batt-soh">--</span><span class="mini-unit">%</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Grid -->
+    <section class="card">
+        <header class="card-header">
+            <h2>Grid</h2>
+            <span class="card-icon grid-icon">
+                <svg><use href="#i-grid"/></svg>
+            </span>
+        </header>
+        <div class="card-main">
+            <div class="big-value">
+                <span id="grid-power">--</span>
+                <span class="big-unit">W</span>
+            </div>
+            <div id="grid-status-text" class="big-label">Grid --</div>
+        </div>
+        <div class="card-grid">
+            <div class="mini">
+                <span class="mini-label">Voltage</span>
+                <div><span class="mini-value" id="grid-voltage">--</span><span class="mini-unit">V</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">Frequency</span>
+                <div><span class="mini-value" id="grid-frequency">--</span><span class="mini-unit">Hz</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">Connection</span>
+                <div><span class="mini-value" id="grid-connection">--</span></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Load -->
+    <section class="card">
+        <header class="card-header">
+            <h2>Load</h2>
+            <span class="card-icon load-icon">
+                <svg><use href="#i-zap"/></svg>
+            </span>
+        </header>
+        <div class="card-main">
+            <div class="big-value">
+                <span id="load-power">--</span>
+                <span class="big-unit">W</span>
+            </div>
+            <div id="load-source" class="big-label">Load Power</div>
+        </div>
+        <div class="card-grid">
+            <div class="mini">
+                <span class="mini-label">House Load</span>
+                <div><span class="mini-value" id="house-load">--</span><span class="mini-unit">W</span></div>
+            </div>
+            <div class="mini">
+                <span class="mini-label">Backup Load</span>
+                <div><span class="mini-value" id="backup-load">--</span><span class="mini-unit">W</span></div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<!-- Energy flow visualization -->
+<section class="card flow-card">
+    <header class="card-header">
+        <h2>Energy Flow</h2>
+        <span class="flow-note">Direction shown only when power data is available</span>
+    </header>
+    <div class="flow">
+        <div class="flow-row">
+            <div class="flow-node" id="flow-solar">
+                <div class="flow-node-icon"><svg><use href="#i-sun"/></svg></div>
+                <div class="flow-node-name">SOLAR</div>
+                <div class="flow-node-value" id="flow-solar-w">-- W</div>
+            </div>
+        </div>
+
+        <div class="flow-row flow-vertical-conn">
+            <div class="flow-arrow-col" id="flow-solar-inv">
+                <div class="flow-arrow down">&#9660;</div>
+            </div>
+        </div>
+
+        <div class="flow-row flow-hub-row">
+            <div class="flow-side">
+                <div class="flow-node" id="flow-battery">
+                    <div class="flow-node-icon"><svg><use href="#i-battery"/></svg></div>
+                    <div class="flow-node-name">BATTERY</div>
+                    <div class="flow-node-value" id="flow-batt-w">-- W</div>
+                </div>
+                <div class="flow-arrow-side" id="flow-batt-inv">
+                    <div class="flow-arrow right">&#9654;</div>
+                </div>
+            </div>
+
+            <div class="flow-node inverter-node" id="flow-inverter">
+                <div class="flow-node-icon"><svg><use href="#i-box"/></svg></div>
+                <div class="flow-node-name">INVERTER</div>
+                <div class="flow-node-sub">solar hub</div>
+                <div class="flow-node-value" id="flow-inv-w"></div>
+            </div>
+
+            <div class="flow-side">
+                <div class="flow-arrow-side" id="flow-inv-load">
+                    <div class="flow-arrow right">&#9654;</div>
+                </div>
+                <div class="flow-node" id="flow-load">
+                    <div class="flow-node-icon"><svg><use href="#i-zap"/></svg></div>
+                    <div class="flow-node-name">LOAD</div>
+                    <div class="flow-node-value" id="flow-load-w">-- W</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flow-row flow-vertical-conn">
+            <div class="flow-arrow-col" id="flow-inv-grid">
+                <div class="flow-arrow down">&#9660;</div>
+            </div>
+        </div>
+
+        <div class="flow-row">
+            <div class="flow-node" id="flow-grid">
+                <div class="flow-node-icon"><svg><use href="#i-grid"/></svg></div>
+                <div class="flow-node-name">GRID</div>
+                <div class="flow-node-value" id="flow-grid-w">-- W</div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Energy statistics -->
+<section class="card">
+    <header class="card-header">
+        <h2>Energy Statistics</h2>
+        <span class="flow-note">Not available until energy registers are verified</span>
+    </header>
+    <div class="stat-grid">
+        <div class="stat">
+            <span class="stat-label">Today's Solar</span>
+            <div><span class="stat-value" id="stat-today-solar">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Today's Consumption</span>
+            <div><span class="stat-value" id="stat-today-consumption">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Battery Charged Today</span>
+            <div><span class="stat-value" id="stat-today-batt-charge">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Battery Discharged Today</span>
+            <div><span class="stat-value" id="stat-today-batt-discharge">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Grid Import</span>
+            <div><span class="stat-value" id="stat-grid-import">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat">
+            <span class="stat-label">Grid Export</span>
+            <div><span class="stat-value" id="stat-grid-export">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

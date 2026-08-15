@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}System — Solis Monitor{% endblock %}
+{% block nav_system %}active{% endblock %}
+
+{% block content %}
+<div class="topbar">
+    <h1>System &amp; Diagnostics</h1>
+    <div class="topbar-right">
+        <span id="sys-last-update" class="last-update">Last update: --</span>
+    </div>
+</div>
+
+<div class="cards">
+    <!-- System info -->
+    <section class="card">
+        <header class="card-header"><h2>System Information</h2></header>
+        <div class="info-table">
+            <div class="info-row"><span class="info-label">Inverter Model</span><span id="sys-model">--</span></div>
+            <div class="info-row"><span class="info-label">Serial Number</span><span id="sys-serial">--</span></div>
+            <div class="info-row"><span class="info-label">Protocol Version</span><span id="sys-protocol">--</span></div>
+            <div class="info-row"><span class="info-label">Product Model Code</span><span id="sys-product">--</span></div>
+            <div class="info-row"><span class="info-label">Connection</span><span id="sys-connection">--</span></div>
+            <div class="info-row"><span class="info-label">Last Successful Read</span><span id="sys-last-read">--</span></div>
+            <div class="info-row"><span class="info-label">Last Error</span><span id="sys-last-error">None</span></div>
+        </div>
+    </section>
+
+    <!-- Connection settings -->
+    <section class="card">
+        <header class="card-header"><h2>Connection Settings</h2></header>
+        <div class="info-table">
+            <div class="info-row"><span class="info-label">Logger IP</span><span id="sys-host">--</span></div>
+            <div class="info-row"><span class="info-label">Modbus Port</span><span id="sys-port">--</span></div>
+            <div class="info-row"><span class="info-label">Slave ID</span><span id="sys-slave">--</span></div>
+            <div class="info-row"><span class="info-label">Timeout</span><span id="sys-timeout">--</span></div>
+            <div class="info-row"><span class="info-label">Polling Interval</span><span id="sys-poll">--</span></div>
+            <div class="info-row"><span class="info-label">Read Errors</span><span id="sys-read-errors">--</span></div>
+            <div class="info-row"><span class="info-label">Connection Errors</span><span id="sys-conn-errors">--</span></div>
+            <div class="info-row"><span class="info-label">Total Reads</span><span id="sys-total-reads">--</span></div>
+        </div>
+    </section>
+</div>
+
+<!-- Register diagnostics table -->
+<section class="card">
+    <header class="card-header">
+        <h2>Register Diagnostics</h2>
+        <span class="flow-note">Function 04 (Read Input Registers)</span>
+    </header>
+    <div class="table-wrap">
+        <table class="diag-table">
+            <thead>
+                <tr>
+                    <th>Parameter</th>
+                    <th>Register</th>
+                    <th>Raw (hex)</th>
+                    <th>Raw (dec)</th>
+                    <th>Decoded</th>
+                    <th>Unit</th>
+                    <th>Scale</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="diag-rows">
+                <tr><td colspan="8" class="table-loading">Loading...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/system.js') }}"></script>
+{% endblock %}

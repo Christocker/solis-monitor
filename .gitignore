@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Database / data files (local history data - do not commit)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
