@@ -27,6 +27,18 @@ python run_dashboard.py
 ```
 or double-click `run_dashboard.bat`, then open **http://127.0.0.1:8080**
 
+### 3. Server mode (dedicated server laptop)
+
+```
+python run_server.py
+```
+or double-click `run_server.bat`. This binds to **0.0.0.0** so any
+device on the LAN can open the dashboard at
+**http://<server-laptop-IP>:8080**.
+
+> Windows Firewall may block port 8080 — add an inbound rule for
+> TCP 8080 if other devices cannot connect.
+
 Pages:
 - **Dashboard** — live cards (Solar, Battery, Grid, Load), energy-flow
   visualization, energy statistics
@@ -112,7 +124,8 @@ power data is available:
 |---------------|---------|
 | `solis_diagnostic.py` | Phase 1 CLI diagnostic (kept) |
 | `solis_verified_read.py` | Clean verified-register readout (kept) |
-| `run_dashboard.py` | Web dashboard entry point |
+| `run_dashboard.py` | Web dashboard entry point (localhost) |
+| `run_server.py` | Web dashboard entry point bound to 0.0.0.0 (LAN) |
 | `dashboard_app/config.py` | Connection + app settings |
 | `dashboard_app/registers.py` | **Single source of truth** for the register map |
 | `dashboard_app/modbus_layer.py` | Layer 1: Modbus acquisition + poller |
