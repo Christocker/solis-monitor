@@ -8,7 +8,7 @@ can remain fully independent.
 
 # Modbus TCP connection to the S2-WL-ST data logger
 CONFIG = {
-    "host": "192.168.1.100",
+    "host": "192.168.1.46",
     "port": 502,
     "slave_id": 1,
     "timeout": 3,          # seconds

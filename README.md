@@ -6,7 +6,7 @@ inverter, accessed via the **Solis S2-WL-ST** data logger over Modbus TCP.
 ## Communication Path
 
 ```
-PC → 192.168.1.100:502 → S2-WL-ST → RS485 → S6-EH1P6K-L-PLUS
+PC → 192.168.1.46:502 → S2-WL-ST → RS485 → S6-EH1P6K-L-PLUS
 ```
 
 ## Two Applications

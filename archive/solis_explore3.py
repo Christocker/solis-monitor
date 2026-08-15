@@ -2,7 +2,7 @@
 from pymodbus.client import ModbusTcpClient
 import struct
 
-client = ModbusTcpClient("192.168.1.100", port=502, timeout=3)
+client = ModbusTcpClient("192.168.1.46", port=502, timeout=3)
 client.connect()
 
 # Read a large block from the 33000 area

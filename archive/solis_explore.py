@@ -1,7 +1,7 @@
 """Quick exploration of working Modbus register ranges."""
 from pymodbus.client import ModbusTcpClient
 
-client = ModbusTcpClient("192.168.1.100", port=502, timeout=3)
+client = ModbusTcpClient("192.168.1.46", port=502, timeout=3)
 client.connect()
 
 # Register 35000 (0x88B8) with Function 04 works.

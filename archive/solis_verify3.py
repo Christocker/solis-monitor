@@ -3,7 +3,7 @@ Scan 37500-41000 and re-examine data blocks around battery voltage.
 """
 from pymodbus.client import ModbusTcpClient
 
-client = ModbusTcpClient("192.168.1.100", port=502, timeout=3)
+client = ModbusTcpClient("192.168.1.46", port=502, timeout=3)
 client.connect()
 
 EXPECTED = {
