@@ -39,6 +39,64 @@ device on the LAN can open the dashboard at
 > Windows Firewall may block port 8080 — add an inbound rule for
 > TCP 8080 if other devices cannot connect.
 
+## Cloud / Vercel Deployment
+
+The website can be hosted online on **Vercel** and accessed from
+anywhere. Live data flows through a **Supabase** cloud database:
+
+```
+Inverter → S2-WL-ST → [laptop: cloud_sync.py] → Supabase → Vercel website
+```
+
+### 4. Cloud sync (runs on the always-on laptop)
+
+```
+python cloud_sync.py
+```
+or double-click `run_cloud_sync.bat`.
+
+This reads the inverter and uploads a row to Supabase every 2 seconds.
+
+### 5. Hosted website (Vercel)
+
+The static site in `web/` reads from Supabase directly (browser-side,
+using the public anon key). No server needed on Vercel.
+
+---
+
+### Setup steps
+
+**A. Create a Supabase project** (free at supabase.com)
+1. Create a project, note the project URL and the `anon` public key
+   (Project Settings > API).
+2. Open the SQL Editor and run the contents of `supabase/schema.sql`.
+   This creates the `readings` + `system_info` tables with row-level
+   security (public read-only).
+
+**B. On the laptop** (the one reading the inverter)
+1. `pip install -r requirements.txt`
+2. Copy `.env.example` to `.env` and fill in:
+   - `SUPABASE_URL` = your project URL
+   - `SUPABASE_SERVICE_KEY` = the **service_role** key (server-side
+     only — never put this in the website)
+3. Run `python cloud_sync.py` (or `run_cloud_sync.bat`).
+   You should see a new line every 2 seconds.
+
+**C. Deploy the website to Vercel**
+1. Push the repo to GitHub (or use `vercel` CLI).
+2. Import the repo at vercel.com, set the **Root Directory** to `web`.
+3. Framework Preset: **Other** (static). Vercel serves `web/` as-is.
+4. Deploy. The site reads from Supabase using the values in
+   `web/config.js`, so edit `SUPABASE_URL` and `SUPABASE_ANON_KEY`
+   there before deploying (anon key is safe to expose — RLS only
+   allows SELECT).
+
+---
+
+> **Security note:** the `service_role` key lives only in the
+> laptop's `.env` (gitignored). The website uses only the `anon`
+> key, which cannot write to the database.
+
 Pages:
 - **Dashboard** — live cards (Solar, Battery, Grid, Load), energy-flow
   visualization, energy statistics
@@ -126,6 +184,11 @@ power data is available:
 | `solis_verified_read.py` | Clean verified-register readout (kept) |
 | `run_dashboard.py` | Web dashboard entry point (localhost) |
 | `run_server.py` | Web dashboard entry point bound to 0.0.0.0 (LAN) |
+| `cloud_sync.py` | Laptop side: push readings to Supabase (every 2s) |
+| `run_cloud_sync.bat` | Launcher for cloud_sync.py |
+| `supabase/schema.sql` | Supabase tables + RLS policies (run in SQL editor) |
+| `web/` | **Vercel static site** (reads from Supabase) |
+| `web/config.js` | Supabase URL + anon key for the hosted site |
 | `dashboard_app/config.py` | Connection + app settings |
 | `dashboard_app/registers.py` | **Single source of truth** for the register map |
 | `dashboard_app/modbus_layer.py` | Layer 1: Modbus acquisition + poller |

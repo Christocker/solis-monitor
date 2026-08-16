@@ -11,6 +11,9 @@ venv/
 *.db-wal
 *.db-shm
 
+# Secrets
+.env
+
 # OS
 Thumbs.db
 .DS_Store
