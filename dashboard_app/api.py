@@ -16,6 +16,7 @@ from .config import DEMO_MODE, SERVER_HOST, SERVER_PORT, POLL_INTERVAL, CONFIG
 from . import modbus_layer
 from . import normalize
 from . import data_logger
+from . import cloud_sync
 
 
 def _current_snapshot():
@@ -149,5 +150,9 @@ def create_app():
     # Start the background poller and data logger when the app is created.
     modbus_layer.start_poller()
     data_logger.start_logger()
+    # Reuse the dashboard's Modbus connection for the cloud sync
+    # (the S2-WL-ST logger allows only ONE connection at a time).
+    if not DEMO_MODE:
+        cloud_sync.start_syncer(modbus_layer.reader)
 
     return app
