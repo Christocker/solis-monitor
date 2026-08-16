@@ -52,16 +52,20 @@ async function fetchSystemInfo() {
     return rows[0] || null;
 }
 
-// Fetch readings within a time range (start_unix, end_unix) oldest-first.
+// Fetch the most recent readings in a time range (newest last for charts).
 async function fetchReadings(startUnix, endUnix, limit) {
-    const params = ["select=*", "order=ts_unix.asc"];
+    // Fetch newest first so we always get the LATEST data even when the
+    // day has more rows than the limit (2s cadence = ~35k rows/day).
+    const params = ["select=*", "order=ts_unix.desc"];
     if (startUnix) params.push("ts_unix=gte." + startUnix);
     if (endUnix) params.push("ts_unix=lte." + endUnix);
     if (limit) params.push("limit=" + limit);
     const url = SUPABASE_URL + "/rest/v1/readings?" + params.join("&");
     const res = await fetch(url, { headers: supabaseHeaders() });
     if (!res.ok) throw new Error("Supabase HTTP " + res.status);
-    return await res.json();
+    const rows = await res.json();
+    rows.reverse(); // newest-last (ascending) so aggregation treats rows[0] as oldest
+    return rows;
 }
 
 // Count readings (for the meta endpoint).

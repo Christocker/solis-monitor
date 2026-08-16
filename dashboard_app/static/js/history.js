@@ -120,7 +120,7 @@ const CHART_DEFS = [
     { id: "chart-batt-a", title: "Battery Current", col: "battery_current", unit: "A",
       type: "line", color: COLORS.battery, group: 3 },
     { id: "chart-batt-w", title: "Battery Power", col: "battery_power", unit: "W",
-      type: "bar", color: COLORS.battery, negColor: COLORS.grid, group: 3 },
+      type: "line", color: COLORS.battery, group: 3 },
     { id: "chart-soc", title: "Battery SOC", col: "battery_soc", unit: "%",
       type: "line", color: COLORS.battery, group: 3 },
     { id: "chart-soh", title: "Battery SOH", col: "battery_soh", unit: "%",
@@ -312,4 +312,5 @@ document.addEventListener("DOMContentLoaded", () => {
     initCharts();
     setupRangeButtons();
     loadHistory();
+    setInterval(loadHistory, 30000);
 });
