@@ -105,4 +105,4 @@ function set(id, text) {
 
 loadConfig();
 loadStatus();
-setInterval(loadStatus, 3000);
+setInterval(loadStatus, 2000);

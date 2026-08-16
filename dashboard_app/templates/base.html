@@ -2,13 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#05060a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>{% block title %}Solis Monitor{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
+    <div class="aurora"></div>
+    <div class="grain"></div>
+
     <!-- Inline SVG sprite for iOS-style icons -->
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+        <defs>
+            <linearGradient id="socGrad" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="#30d158"/>
+                <stop offset="100%" stop-color="#64d2ff"/>
+            </linearGradient>
+        </defs>
         <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1.5"/>
             <rect x="14" y="3" width="7" height="7" rx="1.5"/>
@@ -65,7 +77,7 @@
         <aside class="sidebar">
             <div class="brand">
                 <div class="brand-logo">
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </div>
                 <div class="brand-text">
                     <strong>Solis Monitor</strong>
@@ -97,6 +109,13 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+
+    <nav class="tab-bar">
+        <a href="/" class="tab-link {% block tab_dashboard %}{% endblock %}"><svg><use href="#i-home"/></svg><span>Dashboard</span></a>
+        <a href="/history" class="tab-link {% block tab_history %}{% endblock %}"><svg><use href="#i-chart"/></svg><span>History</span></a>
+        <a href="/system" class="tab-link {% block tab_system %}{% endblock %}"><svg><use href="#i-gear"/></svg><span>System</span></a>
+    </nav>
+
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>

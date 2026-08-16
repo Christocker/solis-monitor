@@ -17,7 +17,7 @@ CONFIG = {
 }
 
 # How often the background poller reads the inverter (seconds)
-POLL_INTERVAL = 3.0
+POLL_INTERVAL = 2.0
 
 # Grid is considered connected when grid voltage is above this threshold (V)
 GRID_CONNECTED_THRESHOLD_V = 50.0

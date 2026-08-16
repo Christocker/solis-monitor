@@ -93,5 +93,5 @@ function renderDiagTable(row) {
 
 document.addEventListener("DOMContentLoaded", () => {
     loadSystem();
-    setInterval(loadSystem, 5000);
+    setInterval(loadSystem, 2000);
 });

@@ -73,13 +73,20 @@ function updateBattery(b) {
     setValue("batt-soc", renderField(b.soc, 0));
     setValue("batt-soh", renderField(b.soh, 0));
     setValue("batt-voltage", renderField(b.voltage, 1));
+    setValue("batt-voltage-meta", renderField(b.voltage, 1));
     setValue("batt-current", renderField(b.current, 2));
     setValue("batt-power", renderField(b.power, 0));
 
-    // SOC bar
+    // SOC ring
     const soc = b.soc && b.soc.state === "available" ? Number(b.soc.value) : 0;
-    const fill = document.getElementById("soc-fill");
-    if (fill) fill.style.width = Math.max(0, Math.min(100, soc)) + "%";
+    const fill = document.getElementById("soc-ring-fill");
+    if (fill) {
+        const r = 38;
+        const circ = 2 * Math.PI * r;
+        fill.style.strokeDasharray = circ.toFixed(2);
+        fill.style.strokeDashoffset = (circ * (1 - Math.max(0, Math.min(100, soc)) / 100)).toFixed(2);
+        fill.style.stroke = soc >= 50 ? "var(--battery)" : (soc >= 20 ? "var(--warning)" : "var(--danger)");
+    }
 }
 
 function updateGrid(g) {
@@ -223,6 +230,6 @@ async function poll() {
     }
 }
 
-// Poll every 3 seconds.
+// Poll every 2 seconds.
 poll();
-setInterval(poll, 3000);
+setInterval(poll, 2000);

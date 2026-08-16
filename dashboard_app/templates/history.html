@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}History — Solis Monitor{% endblock %}
 {% block nav_history %}active{% endblock %}
+{% block tab_history %}active{% endblock %}
 
 {% block content %}
 <div class="topbar">
@@ -49,7 +50,7 @@
 
 <!-- Charts -->
 <div class="charts-grid">
-    <section class="card chart-card">
+    <section class="card chart-card" data-accent="solar">
         <header class="card-header">
             <h2>PV Power</h2>
             <span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span>
@@ -57,7 +58,7 @@
         <div class="chart-wrap"><canvas id="chart-pv"></canvas></div>
     </section>
 
-    <section class="card chart-card">
+    <section class="card chart-card" data-accent="load">
         <header class="card-header">
             <h2>Load Power</h2>
             <span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span>
@@ -65,7 +66,7 @@
         <div class="chart-wrap"><canvas id="chart-load"></canvas></div>
     </section>
 
-    <section class="card chart-card">
+    <section class="card chart-card" data-accent="battery">
         <header class="card-header">
             <h2>Battery SOC</h2>
             <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
@@ -73,7 +74,7 @@
         <div class="chart-wrap"><canvas id="chart-soc"></canvas></div>
     </section>
 
-    <section class="card chart-card">
+    <section class="card chart-card" data-accent="battery">
         <header class="card-header">
             <h2>Battery Power</h2>
             <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>

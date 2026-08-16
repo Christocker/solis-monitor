@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}System — Solis Monitor{% endblock %}
 {% block nav_system %}active{% endblock %}
+{% block tab_system %}active{% endblock %}
 
 {% block content %}
 <div class="topbar">
@@ -12,7 +13,7 @@
 
 <div class="cards">
     <!-- System info -->
-    <section class="card">
+    <section class="card" data-accent="grid">
         <header class="card-header"><h2>System Information</h2></header>
         <div class="info-table">
             <div class="info-row"><span class="info-label">Inverter Model</span><span id="sys-model">--</span></div>
@@ -26,7 +27,7 @@
     </section>
 
     <!-- Connection settings -->
-    <section class="card">
+    <section class="card" data-accent="load">
         <header class="card-header"><h2>Connection Settings</h2></header>
         <div class="info-table">
             <div class="info-row"><span class="info-label">Logger IP</span><span id="sys-host">--</span></div>
@@ -42,7 +43,7 @@
 </div>
 
 <!-- Register diagnostics table -->
-<section class="card">
+<section class="card" data-accent="battery">
     <header class="card-header">
         <h2>Register Diagnostics</h2>
         <span class="flow-note">Function 04 (Read Input Registers)</span>
