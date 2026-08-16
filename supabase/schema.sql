@@ -67,3 +67,16 @@ create policy "system_info service write"
     on public.system_info for all
     using (true)
     with check (true);
+
+-- ============================================================
+-- Table grants for the anon (public) role
+-- ============================================================
+-- PostgREST requires the role to have table privileges in addition
+-- to RLS policies. The website uses the anon key for SELECT only.
+-- The laptop uses the service_role key, which bypasses RLS and
+-- needs no grants here.
+
+grant usage on schema public to anon;
+grant select on public.readings to anon;
+grant select on public.system_info to anon;
+
