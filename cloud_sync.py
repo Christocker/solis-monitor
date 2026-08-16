@@ -60,7 +60,9 @@ def main():
     reader.start()
 
     sync_started = False
+    next_tick = time.monotonic()
     while True:
+        next_tick += cs.SYNC_INTERVAL
         try:
             raw, errors = reader.get_raw_snapshot()
             identification = reader.get_identification()
@@ -87,7 +89,9 @@ def main():
         except Exception as exc:
             print(f"  ! error: {type(exc).__name__}: {exc}")
 
-        time.sleep(cs.SYNC_INTERVAL)
+        delay = next_tick - time.monotonic()
+        if delay > 0:
+            time.sleep(delay)
 
 
 if __name__ == "__main__":

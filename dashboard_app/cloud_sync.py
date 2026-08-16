@@ -164,7 +164,9 @@ class CloudSyncer:
 
     def _loop(self):
         sync_started = False
+        next_tick = time.monotonic()
         while not self._stop_event.is_set():
+            next_tick += self._interval
             try:
                 raw, errors = self._reader.get_raw_snapshot()
                 identification = self._reader.get_identification()
@@ -193,7 +195,11 @@ class CloudSyncer:
             except Exception as exc:
                 print(f"  ! cloud sync error: {type(exc).__name__}: {exc}")
 
-            self._stop_event.wait(self._interval)
+            # Sleep only the remainder of the interval so the upload
+            # cadence stays exactly SYNC_INTERVAL (not interval + upload time).
+            delay = next_tick - time.monotonic()
+            if delay > 0:
+                self._stop_event.wait(delay)
 
 
 # Single shared syncer instance used by the dashboard app.
