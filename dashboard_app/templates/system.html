@@ -3,17 +3,18 @@
 {% block nav_system %}active{% endblock %}
 {% block tab_system %}active{% endblock %}
 
+{% block topbar_right %}
+<span id="sys-last-update" class="last-update">Last update: --</span>
+{% endblock %}
+
 {% block content %}
-<div class="topbar">
+<header class="page-header">
     <h1>System &amp; Diagnostics</h1>
-    <div class="topbar-right">
-        <span id="sys-last-update" class="last-update">Last update: --</span>
-    </div>
-</div>
+    <p class="subtitle">Inverter identity and register status</p>
+</header>
 
 <div class="cards">
-    <!-- System info -->
-    <section class="card" data-accent="grid">
+    <section class="card">
         <header class="card-header"><h2>System Information</h2></header>
         <div class="info-table">
             <div class="info-row"><span class="info-label">Inverter Model</span><span id="sys-model">--</span></div>
@@ -26,27 +27,25 @@
         </div>
     </section>
 
-    <!-- Connection settings -->
-    <section class="card" data-accent="load">
-        <header class="card-header"><h2>Connection Settings</h2></header>
+    <section class="card">
+        <header class="card-header"><h2>Cloud Connection</h2></header>
         <div class="info-table">
-            <div class="info-row"><span class="info-label">Logger IP</span><span id="sys-host">--</span></div>
-            <div class="info-row"><span class="info-label">Modbus Port</span><span id="sys-port">--</span></div>
+            <div class="info-row"><span class="info-label">Data Source</span><span id="sys-host">--</span></div>
+            <div class="info-row"><span class="info-label">Sync Method</span><span id="sys-port">--</span></div>
             <div class="info-row"><span class="info-label">Slave ID</span><span id="sys-slave">--</span></div>
             <div class="info-row"><span class="info-label">Timeout</span><span id="sys-timeout">--</span></div>
             <div class="info-row"><span class="info-label">Polling Interval</span><span id="sys-poll">--</span></div>
             <div class="info-row"><span class="info-label">Read Errors</span><span id="sys-read-errors">--</span></div>
             <div class="info-row"><span class="info-label">Connection Errors</span><span id="sys-conn-errors">--</span></div>
-            <div class="info-row"><span class="info-label">Total Reads</span><span id="sys-total-reads">--</span></div>
+            <div class="info-row"><span class="info-label">Total Readings</span><span id="sys-total-reads">--</span></div>
         </div>
     </section>
 </div>
 
-<!-- Register diagnostics table -->
-<section class="card" data-accent="battery">
-    <header class="card-header">
-        <h2>Register Diagnostics</h2>
-        <span class="flow-note">Function 04 (Read Input Registers)</span>
+<section class="panel">
+    <header class="panel-header">
+        <h2>Latest Readings</h2>
+        <span class="panel-note">From the cloud database (last sync)</span>
     </header>
     <div class="table-wrap">
         <table class="diag-table">

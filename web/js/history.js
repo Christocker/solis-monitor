@@ -5,14 +5,14 @@
 
 const charts = {};
 const COLORS = {
-    solar: "#ff9f0a",
-    load: "#bf5af2",
-    battery: "#30d158",
-    grid: "#0a84ff",
-    teal: "#64d2ff",
-    text: "#98989d",
-    gridLine: "rgba(84, 84, 88, 0.25)",
-    tooltipBg: "rgba(28, 28, 30, 0.95)",
+    solar: "#ff9500",
+    load: "#af52de",
+    battery: "#34c759",
+    grid: "#0071e3",
+    teal: "#30b0c7",
+    text: "#86868b",
+    gridLine: "rgba(0, 0, 0, 0.08)",
+    tooltipBg: "rgba(255, 255, 255, 0.98)",
 };
 
 /* ---------------- Chart factory ---------------- */
@@ -26,8 +26,8 @@ function baseOptions(yTitle) {
         plugins: {
             legend: { display: false },
             tooltip: {
-                backgroundColor: COLORS.tooltipBg, titleColor: "#fff",
-                bodyColor: "#e6e6e6", borderColor: "rgba(84,84,88,0.6)",
+                backgroundColor: COLORS.tooltipBg, titleColor: "#1d1d1f",
+                bodyColor: "#3a3a3c", borderColor: "rgba(0,0,0,0.1)",
                 borderWidth: 1, cornerRadius: 10, padding: 10,
                 displayColors: false,
                 callbacks: {

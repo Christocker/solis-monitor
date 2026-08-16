@@ -3,21 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="theme-color" content="#05060a">
+    <meta name="theme-color" content="#f5f5f7">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Dashboard — Solis Monitor</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="aurora"></div>
-    <div class="grain"></div>
-
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
         <defs>
             <linearGradient id="socGrad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0%" stop-color="#30d158"/>
-                <stop offset="100%" stop-color="#64d2ff"/>
+                <stop offset="0%" stop-color="#34c759"/>
+                <stop offset="100%" stop-color="#30b0c7"/>
             </linearGradient>
         </defs>
         <symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -68,211 +65,203 @@
         </symbol>
     </svg>
 
-    <div class="app">
-        <aside class="sidebar">
-            <div class="brand">
+    <div class="topbar-site">
+        <div class="topbar-inner">
+            <a href="index.html" class="brand">
                 <div class="brand-logo">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                 </div>
                 <div class="brand-text">
                     <strong>Solis Monitor</strong>
                     <span>S6-EH1P6K-L-PLUS</span>
                 </div>
-            </div>
-            <nav class="nav">
+            </a>
+            <nav class="site-nav">
                 <a href="index.html" class="nav-link active">
-                    <span class="nav-icon"><svg><use href="#i-home"/></svg></span>
-                    <span class="nav-text">Dashboard</span>
+                    <svg><use href="#i-home"/></svg><span>Dashboard</span>
                 </a>
                 <a href="history.html" class="nav-link">
-                    <span class="nav-icon"><svg><use href="#i-chart"/></svg></span>
-                    <span class="nav-text">History</span>
+                    <svg><use href="#i-chart"/></svg><span>History</span>
                 </a>
                 <a href="system.html" class="nav-link">
-                    <span class="nav-icon"><svg><use href="#i-gear"/></svg></span>
-                    <span class="nav-text">System</span>
+                    <svg><use href="#i-gear"/></svg><span>System</span>
                 </a>
             </nav>
-            <div class="sidebar-footer">
-                <div id="global-status" class="global-status">
-                    <span class="dot dot-waiting"></span>
-                    <span>Connecting...</span>
-                </div>
+            <div class="topbar-right">
+                <span id="last-update" class="last-update">Last update: --</span>
             </div>
-        </aside>
+        </div>
+    </div>
 
-        <main class="main">
-            <div class="topbar">
-                <h1>Dashboard</h1>
-                <div class="topbar-right">
-                    <span id="last-update" class="last-update">Last update: --</span>
-                </div>
-            </div>
+    <main class="main">
+        <header class="page-header">
+            <h1>Dashboard</h1>
+            <p class="subtitle">Live energy overview</p>
+        </header>
 
-            <div id="status-banner" class="status-banner">
-                <span class="status-pill pill-waiting">
-                    <span class="dot"></span> SYSTEM STATUS PENDING
-                </span>
-                <span id="grid-status-pill" class="status-pill pill-muted">
-                    <span class="dot"></span> GRID --
-                </span>
-            </div>
+        <div id="status-banner" class="status-banner">
+            <span class="status-pill pill-waiting">
+                <span class="dot"></span> SYSTEM STATUS PENDING
+            </span>
+            <span id="grid-status-pill" class="status-pill pill-muted">
+                <span class="dot"></span> GRID --
+            </span>
+        </div>
 
-            <div class="cards">
-                <section class="card" data-accent="solar">
-                    <header class="card-header">
-                        <h2>Solar / PV</h2>
-                        <span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span>
-                    </header>
-                    <div class="card-main">
-                        <div class="big-value">
-                            <span id="solar-power">--</span>
-                            <span class="big-unit">W</span>
-                        </div>
-                        <div class="big-label">PV Power</div>
-                    </div>
-                    <div class="card-grid">
-                        <div class="mini"><span class="mini-label">PV1 Voltage</span><div><span class="mini-value" id="pv1-voltage">--</span><span class="mini-unit">V</span></div></div>
-                        <div class="mini"><span class="mini-label">PV1 Current</span><div><span class="mini-value" id="pv1-current">--</span><span class="mini-unit">A</span></div></div>
-                        <div class="mini"><span class="mini-label">PV2 Voltage</span><div><span class="mini-value" id="pv2-voltage">--</span><span class="mini-unit">V</span></div></div>
-                        <div class="mini"><span class="mini-label">PV2 Current</span><div><span class="mini-value" id="pv2-current">--</span><span class="mini-unit">A</span></div></div>
-                    </div>
-                </section>
-
-                <section class="card" data-accent="battery">
-                    <header class="card-header">
-                        <h2>Battery</h2>
-                        <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
-                    </header>
-                    <div class="soc-wrap">
-                        <div class="soc-ring" id="soc-ring">
-                            <svg viewBox="0 0 88 88">
-                                <circle class="track" cx="44" cy="44" r="38" fill="none" stroke-width="8"/>
-                                <circle class="fill" id="soc-ring-fill" cx="44" cy="44" r="38" fill="none" stroke-width="8"
-                                    stroke-dasharray="238.76" stroke-dashoffset="238.76"/>
-                            </svg>
-                            <span class="soc-ring-label" id="batt-soc">--</span>
-                        </div>
-                        <div class="soc-meta">
-                            <div class="soc-meta-row"><span class="dot dot-ok"></span> State of Charge</div>
-                            <div class="soc-meta-row"><span class="dot" style="background:var(--text-tertiary)"></span> Battery Voltage <span style="font-weight:700;color:var(--text)" id="batt-voltage-meta">--</span> V</div>
-                        </div>
-                    </div>
-                    <div class="card-grid">
-                        <div class="mini"><span class="mini-label">Voltage</span><div><span class="mini-value" id="batt-voltage">--</span><span class="mini-unit">V</span></div></div>
-                        <div class="mini"><span class="mini-label">Current</span><div><span class="mini-value" id="batt-current">--</span><span class="mini-unit">A</span></div></div>
-                        <div class="mini"><span class="mini-label">Power</span><div><span class="mini-value" id="batt-power">--</span><span class="mini-unit">W</span></div></div>
-                        <div class="mini"><span class="mini-label">SOH</span><div><span class="mini-value" id="batt-soh">--</span><span class="mini-unit">%</span></div></div>
-                    </div>
-                </section>
-
-                <section class="card" data-accent="grid">
-                    <header class="card-header">
-                        <h2>Grid</h2>
-                        <span class="card-icon grid-icon"><svg><use href="#i-grid"/></svg></span>
-                    </header>
-                    <div class="card-main">
-                        <div class="big-value">
-                            <span id="grid-power">--</span>
-                            <span class="big-unit">W</span>
-                        </div>
-                        <div id="grid-status-text" class="big-label">Grid --</div>
-                    </div>
-                    <div class="card-grid">
-                        <div class="mini"><span class="mini-label">Voltage</span><div><span class="mini-value" id="grid-voltage">--</span><span class="mini-unit">V</span></div></div>
-                        <div class="mini"><span class="mini-label">Frequency</span><div><span class="mini-value" id="grid-frequency">--</span><span class="mini-unit">Hz</span></div></div>
-                        <div class="mini"><span class="mini-label">Connection</span><div><span class="mini-value" id="grid-connection">--</span></div></div>
-                    </div>
-                </section>
-
-                <section class="card" data-accent="load">
-                    <header class="card-header">
-                        <h2>Load</h2>
-                        <span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span>
-                    </header>
-                    <div class="card-main">
-                        <div class="big-value">
-                            <span id="load-power">--</span>
-                            <span class="big-unit">W</span>
-                        </div>
-                        <div id="load-source" class="big-label">Load Power</div>
-                    </div>
-                    <div class="card-grid">
-                        <div class="mini"><span class="mini-label">House Load</span><div><span class="mini-value" id="house-load">--</span><span class="mini-unit">W</span></div></div>
-                        <div class="mini"><span class="mini-label">Backup Load</span><div><span class="mini-value" id="backup-load">--</span><span class="mini-unit">W</span></div></div>
-                    </div>
-                </section>
-            </div>
-
-            <section class="card flow-card" data-accent="grid">
+        <div class="cards">
+            <section class="card" data-accent="solar">
                 <header class="card-header">
-                    <h2>Energy Flow</h2>
-                    <span class="flow-note">Direction shown only when power data is available</span>
+                    <h2>Solar</h2>
+                    <span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span>
                 </header>
-                <div class="flow">
-                    <div class="flow-row">
-                        <div class="flow-node" id="flow-solar">
-                            <div class="flow-node-icon"><svg><use href="#i-sun"/></svg></div>
-                            <div class="flow-node-name">SOLAR</div>
-                            <div class="flow-node-value" id="flow-solar-w">-- W</div>
-                        </div>
+                <div class="card-main">
+                    <div class="big-value">
+                        <span id="solar-power">--</span>
+                        <span class="big-unit">W</span>
                     </div>
-                    <div class="flow-row flow-vertical-conn">
-                        <div class="flow-arrow-col" id="flow-solar-inv"><div class="flow-arrow down">&#9660;</div></div>
+                    <div class="big-label">PV Power</div>
+                </div>
+                <div class="card-grid">
+                    <div class="mini"><span class="mini-label">PV1</span><div><span class="mini-value" id="pv1-voltage">--</span><span class="mini-unit">V</span></div></div>
+                    <div class="mini"><span class="mini-label">PV1 Current</span><div><span class="mini-value" id="pv1-current">--</span><span class="mini-unit">A</span></div></div>
+                    <div class="mini"><span class="mini-label">PV2</span><div><span class="mini-value" id="pv2-voltage">--</span><span class="mini-unit">V</span></div></div>
+                    <div class="mini"><span class="mini-label">PV2 Current</span><div><span class="mini-value" id="pv2-current">--</span><span class="mini-unit">A</span></div></div>
+                </div>
+            </section>
+
+            <section class="card" data-accent="battery">
+                <header class="card-header">
+                    <h2>Battery</h2>
+                    <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
+                </header>
+                <div class="soc-wrap">
+                    <div class="soc-ring" id="soc-ring">
+                        <svg viewBox="0 0 96 96">
+                            <circle class="track" cx="48" cy="48" r="41" fill="none" stroke-width="9"/>
+                            <circle class="fill" id="soc-ring-fill" cx="48" cy="48" r="41" fill="none" stroke-width="9"
+                                stroke-dasharray="257.61" stroke-dashoffset="257.61"/>
+                        </svg>
+                        <span class="soc-ring-label" id="batt-soc">--</span>
                     </div>
-                    <div class="flow-row flow-hub-row">
-                        <div class="flow-side">
-                            <div class="flow-node" id="flow-battery">
-                                <div class="flow-node-icon"><svg><use href="#i-battery"/></svg></div>
-                                <div class="flow-node-name">BATTERY</div>
-                                <div class="flow-node-value" id="flow-batt-w">-- W</div>
-                            </div>
-                            <div class="flow-arrow-side" id="flow-batt-inv"><div class="flow-arrow right">&#9654;</div></div>
-                        </div>
-                        <div class="flow-node inverter-node" id="flow-inverter">
-                            <div class="flow-node-icon"><svg><use href="#i-box"/></svg></div>
-                            <div class="flow-node-name">INVERTER</div>
-                            <div class="flow-node-sub">solar hub</div>
-                            <div class="flow-node-value" id="flow-inv-w"></div>
-                        </div>
-                        <div class="flow-side">
-                            <div class="flow-arrow-side" id="flow-inv-load"><div class="flow-arrow right">&#9654;</div></div>
-                            <div class="flow-node" id="flow-load">
-                                <div class="flow-node-icon"><svg><use href="#i-zap"/></svg></div>
-                                <div class="flow-node-name">LOAD</div>
-                                <div class="flow-node-value" id="flow-load-w">-- W</div>
-                            </div>
-                        </div>
+                    <div class="soc-meta">
+                        <div class="soc-meta-row"><span class="dot dot-ok"></span> State of Charge</div>
+                        <div class="soc-meta-row"><span>Voltage</span> <b id="batt-voltage-meta">--</b> V</div>
                     </div>
-                    <div class="flow-row flow-vertical-conn">
-                        <div class="flow-arrow-col" id="flow-inv-grid"><div class="flow-arrow down">&#9660;</div></div>
+                </div>
+                <div class="card-grid">
+                    <div class="mini"><span class="mini-label">Voltage</span><div><span class="mini-value" id="batt-voltage">--</span><span class="mini-unit">V</span></div></div>
+                    <div class="mini"><span class="mini-label">Current</span><div><span class="mini-value" id="batt-current">--</span><span class="mini-unit">A</span></div></div>
+                    <div class="mini"><span class="mini-label">Power</span><div><span class="mini-value" id="batt-power">--</span><span class="mini-unit">W</span></div></div>
+                    <div class="mini"><span class="mini-label">Health</span><div><span class="mini-value" id="batt-soh">--</span><span class="mini-unit">%</span></div></div>
+                </div>
+            </section>
+
+            <section class="card" data-accent="grid">
+                <header class="card-header">
+                    <h2>Grid</h2>
+                    <span class="card-icon grid-icon"><svg><use href="#i-grid"/></svg></span>
+                </header>
+                <div class="card-main">
+                    <div class="big-value">
+                        <span id="grid-power">--</span>
+                        <span class="big-unit">W</span>
                     </div>
-                    <div class="flow-row">
-                        <div class="flow-node" id="flow-grid">
-                            <div class="flow-node-icon"><svg><use href="#i-grid"/></svg></div>
-                            <div class="flow-node-name">GRID</div>
-                            <div class="flow-node-value" id="flow-grid-w">-- W</div>
-                        </div>
-                    </div>
+                    <div id="grid-status-text" class="big-label">Grid --</div>
+                </div>
+                <div class="card-grid">
+                    <div class="mini"><span class="mini-label">Voltage</span><div><span class="mini-value" id="grid-voltage">--</span><span class="mini-unit">V</span></div></div>
+                    <div class="mini"><span class="mini-label">Frequency</span><div><span class="mini-value" id="grid-frequency">--</span><span class="mini-unit">Hz</span></div></div>
+                    <div class="mini"><span class="mini-label">Connection</span><div><span class="mini-value" id="grid-connection">--</span></div></div>
                 </div>
             </section>
 
             <section class="card" data-accent="load">
                 <header class="card-header">
-                    <h2>Energy Statistics</h2>
-                    <span class="flow-note">Not available until energy registers are verified</span>
+                    <h2>Load</h2>
+                    <span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span>
                 </header>
-                <div class="stat-grid">
-                    <div class="stat"><span class="stat-label">Today's Solar</span><div><span class="stat-value" id="stat-today-solar">--</span> <span class="stat-unit">kWh</span></div></div>
-                    <div class="stat"><span class="stat-label">Today's Consumption</span><div><span class="stat-value" id="stat-today-consumption">--</span> <span class="stat-unit">kWh</span></div></div>
-                    <div class="stat"><span class="stat-label">Battery Charged Today</span><div><span class="stat-value" id="stat-today-batt-charge">--</span> <span class="stat-unit">kWh</span></div></div>
-                    <div class="stat"><span class="stat-label">Battery Discharged Today</span><div><span class="stat-value" id="stat-today-batt-discharge">--</span> <span class="stat-unit">kWh</span></div></div>
-                    <div class="stat"><span class="stat-label">Grid Import</span><div><span class="stat-value" id="stat-grid-import">--</span> <span class="stat-unit">kWh</span></div></div>
-                    <div class="stat"><span class="stat-label">Grid Export</span><div><span class="stat-value" id="stat-grid-export">--</span> <span class="stat-unit">kWh</span></div></div>
+                <div class="card-main">
+                    <div class="big-value">
+                        <span id="load-power">--</span>
+                        <span class="big-unit">W</span>
+                    </div>
+                    <div id="load-source" class="big-label">Load Power</div>
+                </div>
+                <div class="card-grid">
+                    <div class="mini"><span class="mini-label">House Load</span><div><span class="mini-value" id="house-load">--</span><span class="mini-unit">W</span></div></div>
+                    <div class="mini"><span class="mini-label">Backup Load</span><div><span class="mini-value" id="backup-load">--</span><span class="mini-unit">W</span></div></div>
                 </div>
             </section>
-        </main>
-    </div>
+        </div>
+
+        <section class="panel">
+            <header class="panel-header">
+                <h2>Energy Flow</h2>
+                <span class="panel-note">Direction shown when power data is available</span>
+            </header>
+            <div class="flow">
+                <div class="flow-row">
+                    <div class="flow-node" id="flow-solar">
+                        <div class="flow-node-icon"><svg><use href="#i-sun"/></svg></div>
+                        <div class="flow-node-name">SOLAR</div>
+                        <div class="flow-node-value" id="flow-solar-w">-- W</div>
+                    </div>
+                </div>
+                <div class="flow-row flow-vertical-conn">
+                    <div class="flow-arrow-col" id="flow-solar-inv"><div class="flow-arrow down">&#9660;</div></div>
+                </div>
+                <div class="flow-row flow-hub-row">
+                    <div class="flow-side">
+                        <div class="flow-node" id="flow-battery">
+                            <div class="flow-node-icon"><svg><use href="#i-battery"/></svg></div>
+                            <div class="flow-node-name">BATTERY</div>
+                            <div class="flow-node-value" id="flow-batt-w">-- W</div>
+                        </div>
+                        <div class="flow-arrow-side" id="flow-batt-inv"><div class="flow-arrow right">&#9654;</div></div>
+                    </div>
+                    <div class="flow-node inverter-node" id="flow-inverter">
+                        <div class="flow-node-icon"><svg><use href="#i-box"/></svg></div>
+                        <div class="flow-node-name">INVERTER</div>
+                        <div class="flow-node-sub">solar hub</div>
+                        <div class="flow-node-value" id="flow-inv-w"></div>
+                    </div>
+                    <div class="flow-side">
+                        <div class="flow-arrow-side" id="flow-inv-load"><div class="flow-arrow right">&#9654;</div></div>
+                        <div class="flow-node" id="flow-load">
+                            <div class="flow-node-icon"><svg><use href="#i-zap"/></svg></div>
+                            <div class="flow-node-name">LOAD</div>
+                            <div class="flow-node-value" id="flow-load-w">-- W</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flow-row flow-vertical-conn">
+                    <div class="flow-arrow-col" id="flow-inv-grid"><div class="flow-arrow down">&#9660;</div></div>
+                </div>
+                <div class="flow-row">
+                    <div class="flow-node" id="flow-grid">
+                        <div class="flow-node-icon"><svg><use href="#i-grid"/></svg></div>
+                        <div class="flow-node-name">GRID</div>
+                        <div class="flow-node-value" id="flow-grid-w">-- W</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <header class="panel-header">
+                <h2>Energy Statistics</h2>
+                <span class="panel-note">Unavailable until energy registers are verified</span>
+            </header>
+            <div class="stat-grid">
+                <div class="stat"><span class="stat-label">Today's Solar</span><div><span class="stat-value" id="stat-today-solar">--</span> <span class="stat-unit">kWh</span></div></div>
+                <div class="stat"><span class="stat-label">Today's Consumption</span><div><span class="stat-value" id="stat-today-consumption">--</span> <span class="stat-unit">kWh</span></div></div>
+                <div class="stat"><span class="stat-label">Battery Charged Today</span><div><span class="stat-value" id="stat-today-batt-charge">--</span> <span class="stat-unit">kWh</span></div></div>
+                <div class="stat"><span class="stat-label">Battery Discharged Today</span><div><span class="stat-value" id="stat-today-batt-discharge">--</span> <span class="stat-unit">kWh</span></div></div>
+                <div class="stat"><span class="stat-label">Grid Import</span><div><span class="stat-value" id="stat-grid-import">--</span> <span class="stat-unit">kWh</span></div></div>
+                <div class="stat"><span class="stat-label">Grid Export</span><div><span class="stat-value" id="stat-grid-export">--</span> <span class="stat-unit">kWh</span></div></div>
+            </div>
+        </section>
+    </main>
 
     <nav class="tab-bar">
         <a href="index.html" class="tab-link active"><svg><use href="#i-home"/></svg><span>Dashboard</span></a>
