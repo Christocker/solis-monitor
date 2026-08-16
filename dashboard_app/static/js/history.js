@@ -31,7 +31,13 @@ function baseOptions(yTitle) {
                 borderWidth: 1, cornerRadius: 10, padding: 10,
                 displayColors: false,
                 callbacks: {
-                    label: (ctx) => ctx.parsed.y == null ? "" : " " + ctx.parsed.y,
+                    label: (ctx) => {
+                        const v = ctx.parsed.y;
+                        if (v == null) return "";
+                        const def = CHART_DEFS.find((d) => d.id === ctx.chart.canvas.id);
+                        const unit = def ? " " + def.unit : "";
+                        return " " + v.toFixed(3) + unit;
+                    },
                 },
             },
         },
@@ -134,24 +140,24 @@ const CHART_DEFS = [
 
 /* ---------------- Stat definitions ---------------- */
 const STAT_DEFS = [
-    { id: "stat-pv-kwh", label: "PV Generation", unit: "kWh", fn: (rows) => sumEnergy(rows, "pv_power").toFixed(2) },
-    { id: "stat-pv-avg", label: "Avg PV Power", unit: "W", fn: (rows) => Math.round(avgOf(rows, "pv_power")) },
-    { id: "stat-pv-peak", label: "Peak PV Power", unit: "W", fn: (rows) => Math.round(maxOf(rows, "pv_power")) },
-    { id: "stat-pv1-v-avg", label: "Avg PV1 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv1_voltage").toFixed(1) },
-    { id: "stat-pv2-v-avg", label: "Avg PV2 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv2_voltage").toFixed(1) },
+    { id: "stat-pv-kwh", label: "PV Generation", unit: "kWh", fn: (rows) => sumEnergy(rows, "pv_power").toFixed(3) },
+    { id: "stat-pv-avg", label: "Avg PV Power", unit: "W", fn: (rows) => avgOf(rows, "pv_power").toFixed(3) },
+    { id: "stat-pv-peak", label: "Peak PV Power", unit: "W", fn: (rows) => maxOf(rows, "pv_power").toFixed(3) },
+    { id: "stat-pv1-v-avg", label: "Avg PV1 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv1_voltage").toFixed(3) },
+    { id: "stat-pv2-v-avg", label: "Avg PV2 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv2_voltage").toFixed(3) },
 
-    { id: "stat-grid-v-avg", label: "Avg Grid Voltage", unit: "V", fn: (rows) => avgOf(rows, "grid_voltage").toFixed(1) },
-    { id: "stat-grid-f-avg", label: "Avg Grid Frequency", unit: "Hz", fn: (rows) => avgOf(rows, "grid_frequency").toFixed(2) },
-    { id: "stat-grid-time", label: "Grid Time", unit: "min", fn: (rows) => gridMinutes(rows) },
+    { id: "stat-grid-v-avg", label: "Avg Grid Voltage", unit: "V", fn: (rows) => avgOf(rows, "grid_voltage").toFixed(3) },
+    { id: "stat-grid-f-avg", label: "Avg Grid Frequency", unit: "Hz", fn: (rows) => avgOf(rows, "grid_frequency").toFixed(3) },
+    { id: "stat-grid-time", label: "Grid Time", unit: "min", fn: (rows) => gridMinutes(rows).toFixed(3) },
 
-    { id: "stat-batt-v-avg", label: "Avg Battery Voltage", unit: "V", fn: (rows) => avgOf(rows, "battery_voltage").toFixed(1) },
-    { id: "stat-batt-a-avg", label: "Avg Battery Current", unit: "A", fn: (rows) => avgOf(rows, "battery_current").toFixed(1) },
-    { id: "stat-batt-w-avg", label: "Avg Battery Power", unit: "W", fn: (rows) => Math.round(avgOf(rows, "battery_power")) },
-    { id: "stat-soc-avg", label: "Avg Battery SOC", unit: "%", fn: (rows) => Math.round(avgOf(rows, "battery_soc")) },
-    { id: "stat-soh-avg", label: "Avg Battery SOH", unit: "%", fn: (rows) => Math.round(avgOf(rows, "battery_soh")) },
+    { id: "stat-batt-v-avg", label: "Avg Battery Voltage", unit: "V", fn: (rows) => avgOf(rows, "battery_voltage").toFixed(3) },
+    { id: "stat-batt-a-avg", label: "Avg Battery Current", unit: "A", fn: (rows) => avgOf(rows, "battery_current").toFixed(3) },
+    { id: "stat-batt-w-avg", label: "Avg Battery Power", unit: "W", fn: (rows) => avgOf(rows, "battery_power").toFixed(3) },
+    { id: "stat-soc-avg", label: "Avg Battery SOC", unit: "%", fn: (rows) => avgOf(rows, "battery_soc").toFixed(3) },
+    { id: "stat-soh-avg", label: "Avg Battery SOH", unit: "%", fn: (rows) => avgOf(rows, "battery_soh").toFixed(3) },
 
-    { id: "stat-house-avg", label: "Avg House Load", unit: "W", fn: (rows) => Math.round(avgOf(rows, "house_load")) },
-    { id: "stat-backup-avg", label: "Avg Backup Load", unit: "W", fn: (rows) => Math.round(avgOf(rows, "backup_load")) },
+    { id: "stat-house-avg", label: "Avg House Load", unit: "W", fn: (rows) => avgOf(rows, "house_load").toFixed(3) },
+    { id: "stat-backup-avg", label: "Avg Backup Load", unit: "W", fn: (rows) => avgOf(rows, "backup_load").toFixed(3) },
 ];
 
 function initCharts() {
