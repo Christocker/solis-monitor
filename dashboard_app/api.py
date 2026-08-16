@@ -126,11 +126,21 @@ def create_app():
             rows_out = [
                 {
                     "ts": r[0],
-                    "pv_power": r[1],
-                    "battery_soc": r[2],
-                    "grid_voltage": r[3],
-                    "house_load": r[4],
-                    "backup_load": r[5],
+                    "ts_unix": r[1],
+                    "pv1_voltage": r[2],
+                    "pv1_current": r[3],
+                    "pv2_voltage": r[4],
+                    "pv2_current": r[5],
+                    "pv_power": r[6],
+                    "grid_voltage": r[7],
+                    "grid_frequency": r[8],
+                    "battery_voltage": r[9],
+                    "battery_current": r[10],
+                    "battery_power": r[11],
+                    "battery_soc": r[12],
+                    "battery_soh": r[13],
+                    "house_load": r[14],
+                    "backup_load": r[15],
                 }
                 for r in recent
             ]

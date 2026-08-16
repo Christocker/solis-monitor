@@ -20,70 +20,91 @@
         <button class="range-btn" data-range="30d">30 Days</button>
         <button class="range-btn" data-range="all">All</button>
     </div>
-    <div class="range-custom" id="range-custom" style="display:none;">
-        <input type="date" id="custom-start">
-        <span>to</span>
-        <input type="date" id="custom-end">
-        <button class="range-btn apply" id="custom-apply">Apply</button>
-    </div>
 </div>
 
 <!-- Summary stats -->
 <div class="stat-grid history-stats" id="history-stats">
-    <div class="stat">
-        <span class="stat-label">PV Generation</span>
-        <div><span class="stat-value" id="stat-pv-kwh">--</span> <span class="stat-unit">kWh</span></div>
-    </div>
-    <div class="stat">
-        <span class="stat-label">Avg PV Power</span>
-        <div><span class="stat-value" id="stat-pv-avg">--</span> <span class="stat-unit">W</span></div>
-    </div>
-    <div class="stat">
-        <span class="stat-label">Peak PV Power</span>
-        <div><span class="stat-value" id="stat-pv-peak">--</span> <span class="stat-unit">W</span></div>
-    </div>
-    <div class="stat">
-        <span class="stat-label">Grid Time</span>
-        <div><span class="stat-value" id="stat-grid-time">--</span> <span class="stat-unit">min</span></div>
-    </div>
+    <div class="stat"><span class="stat-label">PV Generation</span><div><span class="stat-value" id="stat-pv-kwh">--</span> <span class="stat-unit">kWh</span></div></div>
+    <div class="stat"><span class="stat-label">Avg PV Power</span><div><span class="stat-value" id="stat-pv-avg">--</span> <span class="stat-unit">W</span></div></div>
+    <div class="stat"><span class="stat-label">Peak PV Power</span><div><span class="stat-value" id="stat-pv-peak">--</span> <span class="stat-unit">W</span></div></div>
+    <div class="stat"><span class="stat-label">Avg PV1 Voltage</span><div><span class="stat-value" id="stat-pv1-v-avg">--</span> <span class="stat-unit">V</span></div></div>
+    <div class="stat"><span class="stat-label">Avg PV2 Voltage</span><div><span class="stat-value" id="stat-pv2-v-avg">--</span> <span class="stat-unit">V</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Grid Voltage</span><div><span class="stat-value" id="stat-grid-v-avg">--</span> <span class="stat-unit">V</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Grid Frequency</span><div><span class="stat-value" id="stat-grid-f-avg">--</span> <span class="stat-unit">Hz</span></div></div>
+    <div class="stat"><span class="stat-label">Grid Time</span><div><span class="stat-value" id="stat-grid-time">--</span> <span class="stat-unit">min</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Battery Voltage</span><div><span class="stat-value" id="stat-batt-v-avg">--</span> <span class="stat-unit">V</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Battery Current</span><div><span class="stat-value" id="stat-batt-a-avg">--</span> <span class="stat-unit">A</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Battery Power</span><div><span class="stat-value" id="stat-batt-w-avg">--</span> <span class="stat-unit">W</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Battery SOC</span><div><span class="stat-value" id="stat-soc-avg">--</span> <span class="stat-unit">%</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Battery SOH</span><div><span class="stat-value" id="stat-soh-avg">--</span> <span class="stat-unit">%</span></div></div>
+    <div class="stat"><span class="stat-label">Avg House Load</span><div><span class="stat-value" id="stat-house-avg">--</span> <span class="stat-unit">W</span></div></div>
+    <div class="stat"><span class="stat-label">Avg Backup Load</span><div><span class="stat-value" id="stat-backup-avg">--</span> <span class="stat-unit">W</span></div></div>
 </div>
 
 <!-- Charts -->
 <div class="charts-grid">
     <section class="card chart-card" data-accent="solar">
-        <header class="card-header">
-            <h2>PV Power</h2>
-            <span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span>
-        </header>
+        <header class="card-header"><h2>PV Power</h2><span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span></header>
         <div class="chart-wrap"><canvas id="chart-pv"></canvas></div>
     </section>
+    <section class="card chart-card" data-accent="solar">
+        <header class="card-header"><h2>PV1 Voltage</h2><span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-pv1-v"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="solar">
+        <header class="card-header"><h2>PV1 Current</h2><span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-pv1-a"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="solar">
+        <header class="card-header"><h2>PV2 Voltage</h2><span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-pv2-v"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="solar">
+        <header class="card-header"><h2>PV2 Current</h2><span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-pv2-a"></canvas></div>
+    </section>
 
-    <section class="card chart-card" data-accent="load">
-        <header class="card-header">
-            <h2>Load Power</h2>
-            <span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span>
-        </header>
-        <div class="chart-wrap"><canvas id="chart-load"></canvas></div>
+    <section class="card chart-card" data-accent="grid">
+        <header class="card-header"><h2>Grid Voltage</h2><span class="card-icon grid-icon"><svg><use href="#i-grid"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-grid-v"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="grid">
+        <header class="card-header"><h2>Grid Frequency</h2><span class="card-icon grid-icon"><svg><use href="#i-grid"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-grid-f"></canvas></div>
     </section>
 
     <section class="card chart-card" data-accent="battery">
-        <header class="card-header">
-            <h2>Battery SOC</h2>
-            <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
-        </header>
-        <div class="chart-wrap"><canvas id="chart-soc"></canvas></div>
+        <header class="card-header"><h2>Battery Voltage</h2><span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-batt-v"></canvas></div>
     </section>
-
     <section class="card chart-card" data-accent="battery">
-        <header class="card-header">
-            <h2>Battery Power</h2>
-            <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
-        </header>
+        <header class="card-header"><h2>Battery Current</h2><span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-batt-a"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="battery">
+        <header class="card-header"><h2>Battery Power</h2><span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span></header>
         <div class="chart-legend">
             <span><i class="legend-dot" style="background:#30d158"></i> Discharge</span>
             <span><i class="legend-dot" style="background:#0a84ff"></i> Charge</span>
         </div>
-        <div class="chart-wrap"><canvas id="chart-batt-power"></canvas></div>
+        <div class="chart-wrap"><canvas id="chart-batt-w"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="battery">
+        <header class="card-header"><h2>Battery SOC</h2><span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-soc"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="battery">
+        <header class="card-header"><h2>Battery SOH</h2><span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-soh"></canvas></div>
+    </section>
+
+    <section class="card chart-card" data-accent="load">
+        <header class="card-header"><h2>House Load</h2><span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-house-load"></canvas></div>
+    </section>
+    <section class="card chart-card" data-accent="load">
+        <header class="card-header"><h2>Backup Load</h2><span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span></header>
+        <div class="chart-wrap"><canvas id="chart-backup-load"></canvas></div>
     </section>
 </div>
 {% endblock %}

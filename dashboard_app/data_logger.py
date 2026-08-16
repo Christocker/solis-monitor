@@ -155,12 +155,15 @@ class DataLogger:
             return self._last_row_count
 
     def query(self, limit=100):
-        """Return the most recent rows (for debugging/preview)."""
+        """Return the most recent rows (for debugging/preview), newest first.
+
+        Row layout: ts_iso, ts_unix, then one value per FIELDS column (in order).
+        """
+        cols = ", ".join(c for _, c in FIELDS)
         conn = self._connect()
         try:
             cur = conn.execute(
-                "SELECT ts_iso, pv_power, battery_soc, grid_voltage, "
-                "house_load, backup_load FROM readings ORDER BY id DESC LIMIT ?",
+                f"SELECT ts_iso, ts_unix, {cols} FROM readings ORDER BY id DESC LIMIT ?",
                 (limit,),
             )
             rows = cur.fetchall()

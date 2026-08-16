@@ -1,49 +1,46 @@
 /* ============================================================
-   History page - fetch recorded data and render charts.
+   History page (web) — fetch readings from Supabase, render charts.
+   Data-driven: every available field is charted with its unit.
    ============================================================ */
 
 const charts = {};
-
 const COLORS = {
     solar: "#ff9f0a",
     load: "#bf5af2",
     battery: "#30d158",
     grid: "#0a84ff",
+    teal: "#64d2ff",
     text: "#98989d",
     gridLine: "rgba(84, 84, 88, 0.25)",
     tooltipBg: "rgba(28, 28, 30, 0.95)",
 };
 
+/* ---------------- Chart factory ---------------- */
+
 function baseOptions(yTitle) {
     return {
         responsive: true,
         maintainAspectRatio: false,
-        animation: { duration: 800, easing: "easeOutQuart" },
+        animation: { duration: 700, easing: "easeOutQuart" },
         interaction: { mode: "nearest", intersect: false },
         plugins: {
             legend: { display: false },
             tooltip: {
-                backgroundColor: COLORS.tooltipBg,
-                titleColor: "#fff",
-                bodyColor: "#e6e6e6",
-                borderColor: "rgba(84,84,88,0.6)",
-                borderWidth: 1,
-                cornerRadius: 10,
-                padding: 10,
+                backgroundColor: COLORS.tooltipBg, titleColor: "#fff",
+                bodyColor: "#e6e6e6", borderColor: "rgba(84,84,88,0.6)",
+                borderWidth: 1, cornerRadius: 10, padding: 10,
                 displayColors: false,
+                callbacks: {
+                    label: (ctx) => ctx.parsed.y == null ? "" : " " + ctx.parsed.y,
+                },
             },
         },
         scales: {
-            x: {
-                grid: { color: COLORS.gridLine },
-                ticks: { color: COLORS.text, maxTicksLimit: 8, font: { size: 11 } },
-            },
-            y: {
-                title: { display: true, text: yTitle, color: COLORS.text, font: { size: 11 } },
-                grid: { color: COLORS.gridLine },
-                ticks: { color: COLORS.text, font: { size: 11 } },
-                beginAtZero: true,
-            },
+            x: { grid: { color: COLORS.gridLine },
+                 ticks: { color: COLORS.text, maxTicksLimit: 8, font: { size: 11 } } },
+            y: { title: { display: true, text: yTitle, color: COLORS.text, font: { size: 11 } },
+                 grid: { color: COLORS.gridLine },
+                 ticks: { color: COLORS.text, font: { size: 11 } }, beginAtZero: true },
         },
     };
 }
@@ -57,13 +54,10 @@ function makeAreaChart(canvasId, color) {
     return new Chart(ctx, {
         type: "line",
         data: { labels: [], datasets: [] },
-        options: {
-            ...baseOptions(),
-            elements: {
-                line: { tension: 0.35, borderWidth: 2.5, borderColor: color, fill: true, backgroundColor: g },
-                point: { radius: 0, hoverRadius: 4 },
-            },
-        },
+        options: { ...baseOptions(),
+            elements: { line: { tension: 0.35, borderWidth: 2.5, borderColor: color,
+                                fill: true, backgroundColor: g },
+                        point: { radius: 0, hoverRadius: 4 } } },
     });
 }
 
@@ -73,13 +67,9 @@ function makeLineChart(canvasId, color) {
     return new Chart(ctx, {
         type: "line",
         data: { labels: [], datasets: [] },
-        options: {
-            ...baseOptions(),
-            elements: {
-                line: { tension: 0.35, borderWidth: 2.5, borderColor: color, fill: false },
-                point: { radius: 0, hoverRadius: 4 },
-            },
-        },
+        options: { ...baseOptions(),
+            elements: { line: { tension: 0.35, borderWidth: 2.5, borderColor: color, fill: false },
+                        point: { radius: 0, hoverRadius: 4 } } },
     });
 }
 
@@ -89,30 +79,90 @@ function makeBarChart(canvasId, positiveColor, negativeColor) {
     return new Chart(ctx, {
         type: "bar",
         data: { labels: [], datasets: [] },
-        options: {
-            ...baseOptions(),
-            elements: {
-                bar: {
-                    borderRadius: 3,
-                    borderSkipped: false,
-                    backgroundColor: (context) => {
-                        const v = context.raw || 0;
-                        return v >= 0 ? positiveColor + "cc" : negativeColor + "cc";
-                    },
-                },
-            },
-        },
+        options: { ...baseOptions(),
+            elements: { bar: { borderRadius: 3, borderSkipped: false,
+                backgroundColor: (context) => {
+                    const v = context.raw || 0;
+                    return v >= 0 ? positiveColor + "cc" : negativeColor + "cc";
+                } } } },
     });
 }
 
+/* ---------------- Chart definitions ----------------
+   id       : canvas element id
+   title    : chart card title
+   col      : readings column
+   unit     : display unit (also the y-axis title)
+   type     : area | line | bar
+   color    : accent color
+   negColor : (bar only) color for negative values
+   group    : 1=solar, 2=grid, 3=battery, 4=load (controls ordering)
+---------------------------------------------------- */
+const CHART_DEFS = [
+    { id: "chart-pv", title: "PV Power", col: "pv_power", unit: "W",
+      type: "area", color: COLORS.solar, group: 1 },
+    { id: "chart-pv1-v", title: "PV1 Voltage", col: "pv1_voltage", unit: "V",
+      type: "line", color: COLORS.solar, group: 1 },
+    { id: "chart-pv1-a", title: "PV1 Current", col: "pv1_current", unit: "A",
+      type: "line", color: COLORS.solar, group: 1 },
+    { id: "chart-pv2-v", title: "PV2 Voltage", col: "pv2_voltage", unit: "V",
+      type: "line", color: COLORS.solar, group: 1 },
+    { id: "chart-pv2-a", title: "PV2 Current", col: "pv2_current", unit: "A",
+      type: "line", color: COLORS.solar, group: 1 },
+
+    { id: "chart-grid-v", title: "Grid Voltage", col: "grid_voltage", unit: "V",
+      type: "line", color: COLORS.grid, group: 2 },
+    { id: "chart-grid-f", title: "Grid Frequency", col: "grid_frequency", unit: "Hz",
+      type: "line", color: COLORS.grid, group: 2 },
+
+    { id: "chart-batt-v", title: "Battery Voltage", col: "battery_voltage", unit: "V",
+      type: "line", color: COLORS.battery, group: 3 },
+    { id: "chart-batt-a", title: "Battery Current", col: "battery_current", unit: "A",
+      type: "line", color: COLORS.battery, group: 3 },
+    { id: "chart-batt-w", title: "Battery Power", col: "battery_power", unit: "W",
+      type: "bar", color: COLORS.battery, negColor: COLORS.grid, group: 3 },
+    { id: "chart-soc", title: "Battery SOC", col: "battery_soc", unit: "%",
+      type: "line", color: COLORS.battery, group: 3 },
+    { id: "chart-soh", title: "Battery SOH", col: "battery_soh", unit: "%",
+      type: "line", color: COLORS.teal, group: 3 },
+
+    { id: "chart-house-load", title: "House Load", col: "house_load", unit: "W",
+      type: "area", color: COLORS.load, group: 4 },
+    { id: "chart-backup-load", title: "Backup Load", col: "backup_load", unit: "W",
+      type: "area", color: COLORS.load, group: 4 },
+];
+
+/* ---------------- Stat definitions ---------------- */
+const STAT_DEFS = [
+    { id: "stat-pv-kwh", label: "PV Generation", unit: "kWh", fn: (rows) => sumEnergy(rows, "pv_power").toFixed(2) },
+    { id: "stat-pv-avg", label: "Avg PV Power", unit: "W", fn: (rows) => Math.round(avgOf(rows, "pv_power")) },
+    { id: "stat-pv-peak", label: "Peak PV Power", unit: "W", fn: (rows) => Math.round(maxOf(rows, "pv_power")) },
+    { id: "stat-pv1-v-avg", label: "Avg PV1 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv1_voltage").toFixed(1) },
+    { id: "stat-pv2-v-avg", label: "Avg PV2 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv2_voltage").toFixed(1) },
+
+    { id: "stat-grid-v-avg", label: "Avg Grid Voltage", unit: "V", fn: (rows) => avgOf(rows, "grid_voltage").toFixed(1) },
+    { id: "stat-grid-f-avg", label: "Avg Grid Frequency", unit: "Hz", fn: (rows) => avgOf(rows, "grid_frequency").toFixed(2) },
+    { id: "stat-grid-time", label: "Grid Time", unit: "min", fn: (rows) => gridMinutes(rows) },
+
+    { id: "stat-batt-v-avg", label: "Avg Battery Voltage", unit: "V", fn: (rows) => avgOf(rows, "battery_voltage").toFixed(1) },
+    { id: "stat-batt-a-avg", label: "Avg Battery Current", unit: "A", fn: (rows) => avgOf(rows, "battery_current").toFixed(1) },
+    { id: "stat-batt-w-avg", label: "Avg Battery Power", unit: "W", fn: (rows) => Math.round(avgOf(rows, "battery_power")) },
+    { id: "stat-soc-avg", label: "Avg Battery SOC", unit: "%", fn: (rows) => Math.round(avgOf(rows, "battery_soc")) },
+    { id: "stat-soh-avg", label: "Avg Battery SOH", unit: "%", fn: (rows) => Math.round(avgOf(rows, "battery_soh")) },
+
+    { id: "stat-house-avg", label: "Avg House Load", unit: "W", fn: (rows) => Math.round(avgOf(rows, "house_load")) },
+    { id: "stat-backup-avg", label: "Avg Backup Load", unit: "W", fn: (rows) => Math.round(avgOf(rows, "backup_load")) },
+];
+
 function initCharts() {
-    charts.pv = makeAreaChart("chart-pv", COLORS.solar);
-    charts.load = makeAreaChart("chart-load", COLORS.load);
-    charts.soc = makeLineChart("chart-soc", COLORS.battery);
-    charts.batt = makeBarChart("chart-batt-power", COLORS.battery, COLORS.grid);
+    for (const def of CHART_DEFS) {
+        if (def.type === "area") charts[def.id] = makeAreaChart(def.id, def.color);
+        else if (def.type === "bar") charts[def.id] = makeBarChart(def.id, def.color, def.negColor || COLORS.grid);
+        else charts[def.id] = makeLineChart(def.id, def.color);
+    }
 }
 
-// ---------------- Range handling ----------------
+/* ---------------- Range handling ---------------- */
 let currentRange = "today";
 
 function dayRange(offsetDays) {
@@ -146,23 +196,19 @@ function timeLabel(ts, range) {
     return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 }
 
-// ---------------- Data processing ----------------
 function aggregate(rows, range, points, col) {
     if (rows.length === 0) return { labels: [], data: [] };
     const first = rows[0].ts_unix;
     const last = rows[rows.length - 1].ts_unix;
     const span = Math.max(1, last - first);
     const bucket = span / points;
-
     const labels = [], data = [];
     for (let i = 0; i < points; i++) {
-        const bStart = first + i * bucket;
-        const bEnd = first + (i + 1) * bucket;
+        const bStart = first + i * bucket, bEnd = first + (i + 1) * bucket;
         let sum = 0, count = 0;
         for (const r of rows) {
             if (r.ts_unix >= bStart && r.ts_unix < bEnd && r[col] != null) {
-                sum += r[col];
-                count++;
+                sum += r[col]; count++;
             }
         }
         labels.push(timeLabel(bStart, range));
@@ -199,51 +245,10 @@ function gridMinutes(rows) {
     let secs = 0;
     for (let i = 1; i < rows.length; i++) {
         const v1 = rows[i - 1].grid_voltage, v2 = rows[i].grid_voltage;
-        if (v1 != null && v1 >= 50 && v2 != null && v2 >= 50) {
+        if (v1 != null && v1 >= 50 && v2 != null && v2 >= 50)
             secs += rows[i].ts_unix - rows[i - 1].ts_unix;
-        }
     }
     return Math.round(secs / 60);
-}
-
-// ---------------- Render ----------------
-function renderCharts(rows, range) {
-    const points = (range === "today" || range === "yesterday") ? 48 : 120;
-
-    const pv = aggregate(rows, range, points, "pv_power");
-    const load = aggregate(rows, range, points, "load_power");
-    const soc = aggregate(rows, range, points, "battery_soc");
-    const batt = aggregate(rows, range, points, "battery_power");
-
-    charts.pv.data.labels = pv.labels;
-    charts.pv.data.datasets = [{ data: pv.data }];
-    charts.pv.update();
-
-    charts.load.data.labels = load.labels;
-    charts.load.data.datasets = [{ data: load.data }];
-    charts.load.update();
-
-    charts.soc.data.labels = soc.labels;
-    charts.soc.data.datasets = [{
-        data: soc.data,
-        borderColor: COLORS.battery,
-        backgroundColor: COLORS.battery + "22",
-    }];
-    charts.soc.update();
-
-    charts.batt.data.labels = batt.labels;
-    charts.batt.data.datasets = [{ data: batt.data }];
-    charts.batt.update();
-
-    const pvKwh = sumEnergy(rows, "pv_power");
-    const pvPeak = maxOf(rows, "pv_power");
-    const pvAvg = avgOf(rows, "pv_power");
-    const gMin = gridMinutes(rows);
-
-    setText("stat-pv-kwh", pvKwh.toFixed(2));
-    setText("stat-pv-avg", Math.round(pvAvg));
-    setText("stat-pv-peak", Math.round(pvPeak));
-    setText("stat-grid-time", gMin);
 }
 
 function setText(id, text) {
@@ -251,24 +256,38 @@ function setText(id, text) {
     if (el) el.textContent = text;
 }
 
+function renderCharts(rows, range) {
+    const points = (range === "today" || range === "yesterday") ? 48 : 120;
+
+    // Summary stats
+    for (const def of STAT_DEFS) {
+        setText(def.id, def.fn(rows));
+    }
+
+    // Charts
+    for (const def of CHART_DEFS) {
+        const chart = charts[def.id];
+        if (!chart) continue;
+        const agg = aggregate(rows, range, points, def.col);
+        chart.data.labels = agg.labels;
+        chart.data.datasets = [{ data: agg.data }];
+        if (def.type === "line") {
+            chart.data.datasets[0].borderColor = def.color;
+            chart.data.datasets[0].backgroundColor = def.color + "22";
+        }
+        chart.update();
+    }
+}
+
 async function loadHistory() {
     const statusEl = document.getElementById("history-status");
     statusEl.textContent = "Loading...";
-
     const rng = rangeToUnix(currentRange);
-    let url = "/api/history?limit=10000";
-    if (rng) url += "&start=" + rng.start + "&end=" + rng.end;
-
     try {
-        const data = await fetchJSON(url);
-        const rows = data.rows;
-        if (rows.length === 0) {
+        const rows = await fetchReadings(rng ? rng.start : null, rng ? rng.end : null, 10000);
+        if (!rows || rows.length === 0) {
             statusEl.textContent = "No recorded data in this range yet.";
             return;
-        }
-        for (const r of rows) {
-            r.load_power = (r.house_load != null && r.house_load > 0)
-                ? r.house_load : r.backup_load;
         }
         renderCharts(rows, currentRange);
         statusEl.textContent = rows.length + " samples";
@@ -289,11 +308,8 @@ function setupRangeButtons() {
     });
 }
 
-function init() {
+document.addEventListener("DOMContentLoaded", () => {
     initCharts();
     setupRangeButtons();
     loadHistory();
-}
-
-document.addEventListener("DOMContentLoaded", init);
-
+});
