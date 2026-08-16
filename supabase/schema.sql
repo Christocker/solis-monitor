@@ -49,34 +49,42 @@ alter table public.readings enable row level security;
 alter table public.system_info enable row level security;
 
 -- Anyone (with the anon key) can read readings.
+drop policy if exists "readings public read" on public.readings;
 create policy "readings public read"
     on public.readings for select
     using (true);
 
 -- Only the service role (or an authenticated user) can write.
+drop policy if exists "readings service write" on public.readings;
 create policy "readings service write"
     on public.readings for insert
     with check (true);
 
 -- System info: anyone can read, only service role can write.
+drop policy if exists "system_info public read" on public.system_info;
 create policy "system_info public read"
     on public.system_info for select
     using (true);
 
+drop policy if exists "system_info service write" on public.system_info;
 create policy "system_info service write"
     on public.system_info for all
     using (true)
     with check (true);
 
 -- ============================================================
--- Table grants for the anon (public) role
+-- Table grants
 -- ============================================================
 -- PostgREST requires the role to have table privileges in addition
 -- to RLS policies. The website uses the anon key for SELECT only.
--- The laptop uses the service_role key, which bypasses RLS and
--- needs no grants here.
+-- The laptop sync uses the service_role key, which bypasses RLS
+-- but still needs explicit table grants to insert/update rows.
 
 grant usage on schema public to anon;
 grant select on public.readings to anon;
 grant select on public.system_info to anon;
+
+grant usage on schema public to service_role;
+grant select, insert, update, delete on public.readings to service_role;
+grant select, insert, update, delete on public.system_info to service_role;
 

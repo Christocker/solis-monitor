@@ -23,7 +23,7 @@ POLL_INTERVAL = 3.0
 GRID_CONNECTED_THRESHOLD_V = 50.0
 
 # Web server
-SERVER_HOST = "127.0.0.1"   # localhost only
+SERVER_HOST = "0.0.0.0"     # all interfaces so other devices on the LAN can connect
 SERVER_PORT = 8080
 
 # Optional DEMO mode. When True, the API serves clearly-labeled mock data
