@@ -440,11 +440,30 @@ body {
 
 /* ============================================================
    Energy flow
+   The diagram has a fixed design width and is scaled down to
+   fit small screens, so it stays intact on every device.
    ============================================================ */
-.flow { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0 4px; }
+.flow-clip {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    overflow: hidden;
+}
+.flow {
+    width: 640px;
+    height: 510px;
+    flex-shrink: 0;
+    transform-origin: center top;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0 4px;
+}
+.flow > * { flex-shrink: 0; }
 
 .flow-row { display: flex; align-items: center; justify-content: center; gap: 28px; }
-.flow-hub-row { display: flex; align-items: center; justify-content: center; gap: 28px; }
+.flow-hub-row { display: flex; align-items: center; justify-content: center; gap: 28px; flex-wrap: nowrap; }
 .flow-vertical-conn { padding: 0; }
 .flow-side { display: flex; align-items: center; gap: 14px; }
 
@@ -864,8 +883,20 @@ body {
     .nav-link span { display: none; }
     .nav-link { padding: 8px 12px; }
     .cards { grid-template-columns: repeat(2, 1fr); }
-    .flow-hub-row { flex-wrap: wrap; gap: 16px; }
     .flow-side { gap: 8px; }
+}
+
+@media (max-width: 700px) {
+    .flow { transform: scale(0.8); height: 408px; }
+}
+@media (max-width: 560px) {
+    .flow { transform: scale(0.68); height: 347px; }
+}
+@media (max-width: 440px) {
+    .flow { transform: scale(0.58); height: 296px; }
+}
+@media (max-width: 360px) {
+    .flow { transform: scale(0.5); height: 255px; }
 }
 
 @media (max-width: 640px) {
@@ -878,9 +909,6 @@ body {
     .card { padding: 20px; }
     .big-value { font-size: 40px; }
     .panel { padding: 20px; }
-    .flow-node { min-width: 120px; padding: 12px 14px; }
-    .flow-node-value { font-size: 15px; }
-    .inverter-node { min-width: 150px; }
     .soc-ring, .soc-ring svg { width: 84px; height: 84px; }
     .charts-grid { grid-template-columns: 1fr; }
     .range-bar { flex-direction: column; align-items: stretch; }
