@@ -466,30 +466,108 @@ body {
 .inverter-node .flow-node-name { color: var(--grid); font-size: 12px; }
 .inverter-node .flow-node-icon { color: var(--grid); background: #fff; }
 
-.flow-arrow-col { display: flex; align-items: center; justify-content: center; height: 28px; }
-.flow-arrow-side { display: flex; align-items: center; justify-content: center; width: 28px; }
+/* ============================================================
+   Energy flow — animated SVG connectors
+   Each connector is an SVG line with:
+     - a faint track (the connection path)
+     - marching dashes flowing source -> destination
+     - a traveling glowing particle
+     - a clean arrowhead at the destination
+   Direction classes (down/up/right/left) rotate the connector,
+   so energy always flows toward its destination.
+   ============================================================ */
+.flow-arrow-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    width: 60px;
+}
+.flow-arrow-side {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 60px;
+}
 .flow-arrow {
-    font-size: 18px;
-    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
     color: var(--text-tertiary);
-    opacity: 0.3;
-    transition: all 0.3s var(--ease);
+    opacity: 0.35;
+    transition: opacity 0.5s var(--ease), color 0.5s var(--ease);
 }
-.flow-arrow.down { transform: rotate(0deg); }
-.flow-arrow.up { transform: rotate(180deg); }
-.flow-arrow.right { transform: rotate(0deg); }
-.flow-arrow.left { transform: rotate(180deg); }
+.flow-arrow svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    display: block;
+}
+.flow-arrow.down, .flow-arrow.right { transform: rotate(0deg); }
+.flow-arrow.up, .flow-arrow.left { transform: rotate(180deg); }
 
-.flow-arrow.active { opacity: 1; animation: currentFlow 1.8s ease-in-out infinite; }
-@keyframes currentFlow {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.18); }
+.flow-track {
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    fill: none;
+    opacity: 0.22;
 }
+.flow-dash {
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    fill: none;
+    stroke-dasharray: 3 11;
+    opacity: 0;
+    animation: flowDash 1.4s linear infinite;
+}
+.flow-head {
+    fill: currentColor;
+    opacity: 0;
+    transition: opacity 0.4s var(--ease);
+}
+.flow-orb {
+    fill: currentColor;
+    opacity: 0;
+}
+.flow-orb-glow {
+    fill: currentColor;
+    opacity: 0;
+}
+
+.flow-arrow.active {
+    opacity: 1;
+}
+.flow-arrow.active .flow-track { opacity: 0.35; }
+.flow-arrow.active .flow-dash { opacity: 0.85; }
+.flow-arrow.active .flow-head {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px currentColor);
+}
+.flow-arrow.active .flow-orb {
+    opacity: 0.95;
+    filter: drop-shadow(0 0 5px currentColor);
+}
+
+@keyframes flowDash {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: -14; }
+}
+
 .flow-arrow.active.pv { color: var(--solar); }
 .flow-arrow.active.batt { color: var(--battery); }
 .flow-arrow.active.grid { color: var(--grid); }
 .flow-arrow.active.load { color: var(--load); }
 .flow-arrow.active.inv { color: var(--tint); }
+
+@media (prefers-reduced-motion: reduce) {
+    .flow-dash { animation: none; opacity: 0.5; }
+    .flow-orb, .flow-orb-glow { display: none; }
+}
 
 /* ============================================================
    Stats
