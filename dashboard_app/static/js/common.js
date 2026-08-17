@@ -36,6 +36,18 @@ async function fetchJSON(url) {
     }
 }
 
+// Fetch readings in a time range (start_unix, end_unix) from the local API,
+// newest-last so the history chart's aggregation treats rows[0] as oldest.
+async function fetchReadings(startUnix, endUnix, limit) {
+    let url = "/api/history?limit=" + (limit || 10000);
+    if (startUnix) url += "&start=" + startUnix;
+    if (endUnix) url += "&end=" + endUnix;
+    const data = await fetchJSON(url);
+    const rows = (data && data.rows) || [];
+    rows.sort((a, b) => a.ts_unix - b.ts_unix);
+    return rows;
+}
+
 // Update the sidebar global status pill based on snapshot.
 function updateGlobalStatus(snapshot) {
     const el = document.getElementById("global-status");

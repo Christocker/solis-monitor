@@ -168,38 +168,33 @@ function initCharts() {
     }
 }
 
-/* ---------------- Range handling ---------------- */
-let currentRange = "today";
+/* ---------------- View handling ---------------- */
+// Each view sets the time window and the aggregation bucket size.
+let currentView = "minutes";
 
-function dayRange(offsetDays) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    start.setDate(start.getDate() - offsetDays);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    end.setMilliseconds(-1);
-    return { start: start.getTime() / 1000, end: end.getTime() / 1000 };
-}
+const VIEWS = {
+    seconds: { label: "Seconds", window: 600,     points: 120 },  // 10 min @ 5s
+    minutes: { label: "Minutes", window: 10800,   points: 180 },  //  3 h  @ 1 min
+    hours:   { label: "Hours",   window: 604800,  points: 168 },  //  7 d  @ 1 h
+    days:    { label: "Days",    window: 2592000, points: 30 },   // 30 d  @ 1 day
+};
 
-function rangeToUnix(range) {
+function viewRange(view) {
     const now = Date.now() / 1000;
-    switch (range) {
-        case "today": return dayRange(0);
-        case "yesterday": return dayRange(1);
-        case "7d": return { start: now - 7 * 86400, end: now };
-        case "30d": return { start: now - 30 * 86400, end: now };
-        case "all": return null;
-        default: return { start: now - 86400, end: now };
-    }
+    const w = VIEWS[view].window;
+    return { start: now - w, end: now };
 }
 
-function timeLabel(ts, range) {
+function timeLabel(ts, view) {
     const d = new Date(ts * 1000);
     const pad = (n) => String(n).padStart(2, "0");
-    const hhmm = pad(d.getHours()) + ":" + pad(d.getMinutes());
-    if (range === "today" || range === "yesterday") return hhmm;
-    if (range === "7d") return (d.getMonth() + 1) + "/" + d.getDate() + " " + pad(d.getHours()) + ":00";
-    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    const hh = pad(d.getHours()), mm = pad(d.getMinutes()), ss = pad(d.getSeconds());
+    switch (view) {
+        case "seconds": return hh + ":" + mm + ":" + ss;
+        case "minutes": return hh + ":" + mm;
+        case "hours": return (d.getMonth() + 1) + "/" + d.getDate() + " " + hh + ":00";
+        default: return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+    }
 }
 
 function aggregate(rows, range, points, col) {
@@ -262,8 +257,8 @@ function setText(id, text) {
     if (el) el.textContent = text;
 }
 
-function renderCharts(rows, range) {
-    const points = (range === "today" || range === "yesterday") ? 48 : 120;
+function renderCharts(rows, view) {
+    const points = VIEWS[view].points;
 
     // Summary stats
     for (const def of STAT_DEFS) {
@@ -274,7 +269,7 @@ function renderCharts(rows, range) {
     for (const def of CHART_DEFS) {
         const chart = charts[def.id];
         if (!chart) continue;
-        const agg = aggregate(rows, range, points, def.col);
+        const agg = aggregate(rows, view, points, def.col);
         chart.data.labels = agg.labels;
         chart.data.datasets = [{ data: agg.data }];
         if (def.type === "line") {
@@ -288,14 +283,14 @@ function renderCharts(rows, range) {
 async function loadHistory() {
     const statusEl = document.getElementById("history-status");
     statusEl.textContent = "Loading...";
-    const rng = rangeToUnix(currentRange);
+    const rng = viewRange(currentView);
     try {
-        const rows = await fetchReadings(rng ? rng.start : null, rng ? rng.end : null, 10000);
+        const rows = await fetchReadings(rng.start, rng.end, 10000);
         if (!rows || rows.length === 0) {
             statusEl.textContent = "No recorded data in this range yet.";
             return;
         }
-        renderCharts(rows, currentRange);
+        renderCharts(rows, currentView);
         statusEl.textContent = rows.length + " samples";
     } catch (err) {
         statusEl.textContent = "Error loading history";
@@ -303,12 +298,12 @@ async function loadHistory() {
     }
 }
 
-function setupRangeButtons() {
+function setupViewButtons() {
     document.querySelectorAll(".range-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             document.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
             btn.classList.add("active");
-            currentRange = btn.dataset.range;
+            currentView = btn.dataset.range;
             loadHistory();
         });
     });
@@ -316,7 +311,7 @@ function setupRangeButtons() {
 
 document.addEventListener("DOMContentLoaded", () => {
     initCharts();
-    setupRangeButtons();
+    setupViewButtons();
     loadHistory();
     setInterval(loadHistory, 30000);
 });
