@@ -140,7 +140,7 @@ function updateFlow(snapshot) {
                   : (battCurrent !== null ? Math.sign(battCurrent) : 0);
     if (battDir > 0) setArrow("flow-batt-inv", true, "batt", "left");   // charging: hub -> battery
     else if (battDir < 0) setArrow("flow-batt-inv", true, "batt", "right"); // discharging: battery -> hub
-    else setArrow("flow-batt-inv", false, "batt", "right");
+    else setArrow("flow-batt-inv", false, "batt", "hide");
 
     if (gridConnected === true && gridPower !== null && gridPower > 0)
         setArrow("flow-inv-grid", true, "grid", "up");
@@ -154,6 +154,10 @@ function setArrow(id, active, colorClass, direction) {
     if (!el) return;
     const arrow = el.querySelector(".flow-arrow");
     if (!arrow) return;
+    if (direction === "hide") {
+        arrow.className = "flow-arrow hidden";
+        return;
+    }
     arrow.className = "flow-arrow " + direction;
     if (active) arrow.classList.add("active", colorClass);
 }

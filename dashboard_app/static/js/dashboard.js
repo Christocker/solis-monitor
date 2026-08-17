@@ -176,7 +176,7 @@ function updateFlow(snapshot) {
     } else if (battDir < 0) {
         setArrow("flow-batt-inv", true, "batt", "right");    // discharging: battery -> hub
     } else {
-        setArrow("flow-batt-inv", false, "batt", "right");
+        setArrow("flow-batt-inv", false, "batt", "hide");    // 0W -> no arrow
     }
 
     // Grid <-> Inverter: only show flow when grid is CONNECTED.
@@ -196,6 +196,10 @@ function setArrow(id, active, colorClass, direction) {
     if (!el) return;
     const arrow = el.querySelector(".flow-arrow");
     if (!arrow) return;
+    if (direction === "hide") {
+        arrow.className = "flow-arrow hidden";
+        return;
+    }
     arrow.className = "flow-arrow " + direction;
     if (active) {
         arrow.classList.add("active", colorClass);

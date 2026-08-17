@@ -569,6 +569,13 @@ body {
 .flow-arrow.down, .flow-arrow.right { transform: rotate(0deg); }
 .flow-arrow.up, .flow-arrow.left { transform: rotate(180deg); }
 
+/* No power flow -> connector fully hidden (no faint track) */
+.flow-arrow.hidden {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
 /* Base path */
 .flow-track {
     stroke: currentColor;
