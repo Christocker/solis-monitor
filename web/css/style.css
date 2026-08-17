@@ -576,6 +576,16 @@ body {
     pointer-events: none;
 }
 
+/* Connected but no power transfer -> plain line, no arrowhead/comet */
+.flow-arrow.line {
+    transform: none;
+    opacity: 1;
+}
+.flow-arrow.line .flow-track { opacity: 0.4; }
+.flow-arrow.line .flow-dash,
+.flow-arrow.line .comet,
+.flow-arrow.line .flow-head { opacity: 0; }
+
 /* Base path */
 .flow-track {
     stroke: currentColor;

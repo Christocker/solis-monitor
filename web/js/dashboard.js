@@ -142,11 +142,15 @@ function updateFlow(snapshot) {
     else if (battDir < 0) setArrow("flow-batt-inv", true, "batt", "right"); // discharging: battery -> hub
     else setArrow("flow-batt-inv", false, "batt", "hide");
 
+    // Grid: only show directional flow when grid import/export power is
+    // actually available. When just connected, show a plain line (no arrow).
     if (gridConnected === true && gridPower !== null && gridPower > 0)
         setArrow("flow-inv-grid", true, "grid", "up");
     else if (gridConnected === true && gridPower !== null && gridPower < 0)
         setArrow("flow-inv-grid", true, "grid", "down");
-    else setArrow("flow-inv-grid", false, "grid", "up");
+    else if (gridConnected === true)
+        setArrow("flow-inv-grid", false, "grid", "line");
+    else setArrow("flow-inv-grid", false, "grid", "hide");
 }
 
 function setArrow(id, active, colorClass, direction) {
@@ -156,6 +160,10 @@ function setArrow(id, active, colorClass, direction) {
     if (!arrow) return;
     if (direction === "hide") {
         arrow.className = "flow-arrow hidden";
+        return;
+    }
+    if (direction === "line") {
+        arrow.className = "flow-arrow line";
         return;
     }
     arrow.className = "flow-arrow " + direction;

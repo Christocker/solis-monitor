@@ -179,15 +179,16 @@ function updateFlow(snapshot) {
         setArrow("flow-batt-inv", false, "batt", "hide");    // 0W -> no arrow
     }
 
-    // Grid <-> Inverter: only show flow when grid is CONNECTED.
-    //   Grid power (grid import/export) is not yet available from a
-    //   verified register, so the arrow stays dim for now.
+    // Grid <-> Inverter: only show directional flow when grid import/export
+    // power is actually available. When just connected, show a plain line.
     if (gridConnected === true && gridPower !== null && gridPower > 0) {
         setArrow("flow-inv-grid", true, "grid", "up");       // import: grid -> hub
     } else if (gridConnected === true && gridPower !== null && gridPower < 0) {
         setArrow("flow-inv-grid", true, "grid", "down");     // export: hub -> grid
+    } else if (gridConnected === true) {
+        setArrow("flow-inv-grid", false, "grid", "line");    // connected: plain line
     } else {
-        setArrow("flow-inv-grid", false, "grid", "up");
+        setArrow("flow-inv-grid", false, "grid", "hide");    // disconnected: hidden
     }
 }
 
@@ -198,6 +199,10 @@ function setArrow(id, active, colorClass, direction) {
     if (!arrow) return;
     if (direction === "hide") {
         arrow.className = "flow-arrow hidden";
+        return;
+    }
+    if (direction === "line") {
+        arrow.className = "flow-arrow line";
         return;
     }
     arrow.className = "flow-arrow " + direction;
