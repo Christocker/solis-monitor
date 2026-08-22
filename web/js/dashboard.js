@@ -124,8 +124,7 @@ function updateFlow(snapshot) {
 
     setValue("flow-solar-w", pvPower === null ? "--" : pvPower.toFixed(0) + " W");
     setValue("flow-load-w", loadPower === null ? "--" : loadPower.toFixed(0) + " W");
-    // After normalize.py negation: positive = discharging (power out),
-    // negative = charging (power into battery).
+    // Battery: positive = discharging (power out), negative = charging (power into battery).
     setValue("flow-batt-w", battPower === null ? "--"
         : (battPower > 0 ? "out " : "in ") + Math.abs(battPower).toFixed(0) + " W");
 
@@ -136,8 +135,8 @@ function updateFlow(snapshot) {
     setArrow("flow-solar-inv", pvPower !== null && pvPower > 0, "pv", "down");
     setArrow("flow-inv-load", loadPower !== null && loadPower > 0, "load", "right");
 
-    // After normalize.py negation: positive = DISCHARGING (battery -> inverter,
-    // arrow right). Negative = CHARGING (inverter -> battery, arrow left).
+    // Positive = DISCHARGING (battery -> inverter, arrow right).
+    // Negative = CHARGING (inverter -> battery, arrow left).
     const battDir = battPower !== null ? Math.sign(battPower)
                   : (battCurrent !== null ? Math.sign(battCurrent) : 0);
     if (battDir > 0) setArrow("flow-batt-inv", true, "batt", "right");   // discharging: battery -> hub

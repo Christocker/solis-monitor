@@ -130,20 +130,14 @@ def build_snapshot(raw, errors, identification):
     }
 
     # ---------------- Battery ----------------
-    # ESINV-33000ID registers: positive current/power = CHARGING.
-    # Verified convention on THIS S6-EH1P6K-L-PLUS: positive = DISCHARGING.
-    # Negate current and power so the dashboard JS sees positive = discharging
-    # (battery supplying the system) directly.
-    bat_i = field("battery_current")
-    bat_p = field("battery_power")
-    if bat_i["state"] == "available" and bat_i["value"] is not None:
-        bat_i["value"] = -bat_i["value"]
-    if bat_p["state"] == "available" and bat_p["value"] is not None:
-        bat_p["value"] = -bat_p["value"]
+    # The ESINV-33000ID register convention (positive = charging) does NOT
+    # apply to this specific S6-EH1P6K-L-PLUS. On THIS inverter, the register
+    # returns: positive = DISCHARGING, negative = CHARGING.
+    # The JS dashboard interprets positive = discharging directly.
     battery = {
         "voltage": field("battery_voltage"),
-        "current": bat_i,
-        "power": bat_p,
+        "current": field("battery_current"),
+        "power": field("battery_power"),
         "soc": field("battery_soc"),
         "soh": field("battery_soh"),
     }
