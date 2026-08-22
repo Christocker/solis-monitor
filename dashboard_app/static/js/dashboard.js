@@ -144,10 +144,10 @@ function updateFlow(snapshot) {
     // Node values (only show when available)
     setValue("flow-solar-w", pvPower === null ? "--" : pvPower.toFixed(0) + " W");
     setValue("flow-load-w", loadPower === null ? "--" : loadPower.toFixed(0) + " W");
-    // Solis S6-EH1P: positive battery power = CHARGING (power into battery),
-    // negative = discharging (power out of battery).
+    // Battery: after normalize.py negation, positive = discharging (power out),
+    // negative = charging (power into battery).
     setValue("flow-batt-w", battPower === null ? "--"
-        : (battPower > 0 ? "in " : "out ") + Math.abs(battPower).toFixed(0) + " W");
+        : (battPower > 0 ? "out " : "in ") + Math.abs(battPower).toFixed(0) + " W");
     // Grid node value: show connection state; power only when we have it.
     if (gridConnected === false) {
         setValue("flow-grid-w", "DISCONNECTED");
@@ -166,17 +166,17 @@ function updateFlow(snapshot) {
     setArrow("flow-inv-load", loadPower !== null && loadPower > 0, "load", "right");
 
     // Battery <-> Inverter direction.
-    //   Solis S6-EH1P: positive battery power = CHARGING (inverter -> battery,
-    //   arrow left pointing at the battery). Negative = DISCHARGING (battery ->
-    //   inverter, arrow right pointing at the inverter icon).
+    //   After normalize.py negation: positive = DISCHARGING (battery -> inverter,
+    //   arrow right pointing at the inverter icon). Negative = CHARGING (inverter
+    //   -> battery, arrow left pointing at the battery itself).
     const battDir = battPower !== null ? Math.sign(battPower)
                   : (battCurrent !== null ? Math.sign(battCurrent) : 0);
     if (battDir > 0) {
-        setArrow("flow-batt-inv", true, "batt", "left");     // charging: hub -> battery
-    } else if (battDir < 0) {
         setArrow("flow-batt-inv", true, "batt", "right");    // discharging: battery -> hub
+    } else if (battDir < 0) {
+        setArrow("flow-batt-inv", true, "batt", "left");     // charging: hub -> battery
     } else {
-        setArrow("flow-batt-inv", false, "batt", "hide");    // 0W -> no arrow
+        setArrow("flow-batt-inv", false, "batt", "hide");
     }
 
     // Grid <-> Inverter: only show directional flow when grid import/export
