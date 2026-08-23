@@ -455,7 +455,7 @@ body {
 }
 .flow {
     width: 100%;
-    max-width: 560px;
+    max-width: 700px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -465,7 +465,7 @@ body {
 }
 
 .flow-row { display: flex; align-items: center; justify-content: center; gap: 24px; }
-.flow-hub-row { display: flex; align-items: center; justify-content: center; gap: 16px; flex-wrap: nowrap; }
+.flow-hub-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: nowrap; }
 .flow-vertical-conn { padding: 0; }
 .flow-side { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 0; justify-content: center; }
 
@@ -474,7 +474,7 @@ body {
     flex-direction: column;
     align-items: center;
     min-width: 0;
-    flex: 1 1 100px;
+    flex: 1 1 120px;
     padding: 14px 18px;
     border-radius: var(--radius-md);
     background: var(--surface-muted);
@@ -526,7 +526,8 @@ body {
 .inverter-node {
     border: 2px solid rgba(0, 113, 227, 0.35);
     background: rgba(0, 113, 227, 0.05);
-    flex: 1.3 1 110px;
+    flex: 1.2 1 140px;
+    padding: 14px 22px;
 }
 .inverter-node .flow-node-name { color: var(--grid); font-size: 12px; }
 .inverter-node .flow-node-icon { color: var(--grid); background: #fff; }
@@ -540,21 +541,21 @@ body {
      - a pulsing arrowhead at the destination
    Direction classes (down/up/right/left) rotate the connector,
    so energy always flows toward its destination.
-   Pure CSS animation (offset-path) — no SMIL, always animates.
+   Pure CSS animation (offset-path) - no SMIL, always animates.
    ============================================================ */
 .flow-arrow-col {
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 46px;
-    width: 64px;
+    height: 36px;
+    width: 32px;
 }
 .flow-arrow-side {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 46px;
-    height: 64px;
+    width: 32px;
+    height: 44px;
 }
 .flow-arrow {
     display: flex;
@@ -913,65 +914,40 @@ body {
 /* Energy flow: responsive sizing */
 @media (max-width: 700px) {
     .flow { gap: 4px; padding: 8px 0 14px; }
-    .flow-node { padding: 10px 14px; flex: 1 1 80px; }
+    .flow-node { padding: 10px 14px; }
     .flow-node-name { font-size: 10px; }
     .flow-node-value { font-size: 14px; }
     .flow-hub-row { gap: 8px; }
-    .flow-side { gap: 6px; }
+    .flow-arrow-col { height: 32px; }
+    .flow-arrow-side { width: 36px; }
+    .flow-arrow svg { width: 36px; height: 36px; }
 }
 @media (max-width: 560px) {
     .flow { padding: 6px 0 16px; }
     .flow-hub-row { gap: 6px; }
-    .flow-node { padding: 8px 12px; flex: 1 1 70px; }
+    .flow-node { padding: 10px 12px; }
     .flow-node-icon { width: 32px; height: 32px; border-radius: 9px; }
     .flow-node-icon svg { width: 18px; height: 18px; }
     .flow-node-name { font-size: 9px; }
     .flow-node-value { font-size: 13px; }
-    .flow-side { gap: 5px; }
-    .flow-arrow-col { height: 28px; }
+    .flow-arrow-col { height: 26px; }
     .flow-arrow-side { width: 28px; }
     .flow-arrow svg { width: 28px; height: 28px; }
-    .inverter-node { flex: 1.2 1 90px; }
 }
-/* Mobile: CSS Grid for precise node placement */
+/* Mobile: compact layout */
 @media (max-width: 440px) {
-    .flow {
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        grid-template-areas:
-            ". solar ."
-            ". arrow1 ."
-            "battery inverter load"
-            ". arrow3 ."
-            ". grid .";
-        gap: 6px;
-        max-width: 100%;
-        padding: 6px 0 28px;
-    }
-    .flow-row, .flow-hub-row, .flow-side { display: contents; }
-    #flow-solar { grid-area: solar; justify-self: center; }
-    #flow-solar-inv { grid-area: arrow1; justify-self: center; }
-    #flow-battery { grid-area: battery; justify-self: start; }
-    #flow-inverter { grid-area: inverter; justify-self: center; }
-    #flow-load { grid-area: load; justify-self: end; }
-    #flow-inv-grid { grid-area: arrow3; justify-self: center; }
-    #flow-grid { grid-area: grid; justify-self: center; }
-    .flow-arrow-side { display: none; }
-    .flow-node {
-        padding: 8px 10px;
-        min-width: 0;
-        flex: none;
-        width: auto;
-        max-width: 100%;
-    }
+    .flow { padding: 6px 0 24px; }
+    .flow-hub-row { gap: 4px; }
+    .flow-node { padding: 8px 10px; }
     .flow-node-icon { width: 28px; height: 28px; border-radius: 8px; }
     .flow-node-icon svg { width: 16px; height: 16px; }
-    .flow-node-name { font-size: 8px; }
+    .flow-node-name { font-size: 8px; letter-spacing: 0.03em; }
     .flow-node-value { font-size: 12px; min-height: 16px; }
     .flow-node-sub { display: none; }
     .flow-arrow-col { height: 22px; }
-    .flow-arrow svg { width: 22px; height: 22px; }
-    .inverter-node { max-width: 100%; }
+    .flow-arrow-side { width: 20px; }
+    .flow-arrow svg { width: 20px; height: 20px; }
+    .flow-node-value { font-size: 11px; }
 }
 
 @media (max-width: 640px) {
