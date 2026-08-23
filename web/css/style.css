@@ -461,7 +461,7 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 6px;
-    padding: 10px 0 24px;
+    padding: 10px 0 28px;
 }
 
 .flow-row { display: flex; align-items: center; justify-content: center; gap: 24px; }
@@ -920,7 +920,7 @@ body {
     .flow-side { gap: 6px; }
 }
 @media (max-width: 560px) {
-    .flow { padding: 6px 0 12px; }
+    .flow { padding: 6px 0 16px; }
     .flow-hub-row { gap: 6px; }
     .flow-node { padding: 8px 12px; flex: 1 1 70px; }
     .flow-node-icon { width: 32px; height: 32px; border-radius: 9px; }
@@ -946,7 +946,7 @@ body {
             ". grid .";
         gap: 6px;
         max-width: 100%;
-        padding: 6px 0 24px;
+        padding: 6px 0 28px;
     }
     .flow-row, .flow-hub-row, .flow-side { display: contents; }
     #flow-solar { grid-area: solar; justify-self: center; }
