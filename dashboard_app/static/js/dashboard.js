@@ -144,7 +144,8 @@ function updateFlow(snapshot) {
     // Node values (only show when available)
     setValue("flow-solar-w", pvPower === null ? "--" : pvPower.toFixed(0) + " W");
     setValue("flow-load-w", loadPower === null ? "--" : loadPower.toFixed(0) + " W");
-    // Battery: positive = discharging (power out), negative = charging (power into battery).
+    // Battery: after normalize.py negation, positive = discharging (power out),
+    // negative = charging (power into battery).
     setValue("flow-batt-w", battPower === null ? "--"
         : (battPower > 0 ? "out " : "in ") + Math.abs(battPower).toFixed(0) + " W");
     // Grid node value: show connection state; power only when we have it.

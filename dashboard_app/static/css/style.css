@@ -446,8 +446,9 @@ body {
 
 /* ============================================================
    Energy flow
-   The diagram has a fixed design width and is scaled down to
-   fit small screens, so it stays intact on every device.
+   Responsive flex layout — adapts to container width.
+   On mobile the hub row wraps so Battery/Inverter/Load
+   re-stack without clipping.
    ============================================================ */
 .flow-clip {
     width: 100%;
@@ -461,7 +462,7 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    padding: 8px 0 4px;
+    padding: 8px 0 12px;
 }
 
 .flow-row { display: flex; align-items: center; justify-content: center; gap: 24px; }
@@ -912,7 +913,7 @@ body {
 
 /* Energy flow: adapt sizing per viewport, no transform: scale */
 @media (max-width: 700px) {
-    .flow { gap: 2px; padding: 6px 0; }
+    .flow { gap: 2px; padding: 6px 0 10px; }
     .flow-node { padding: 10px 12px; flex: 1 1 80px; }
     .flow-node-name { font-size: 10px; }
     .flow-node-value { font-size: 14px; }
@@ -920,6 +921,7 @@ body {
     .flow-side { gap: 6px; }
 }
 @media (max-width: 560px) {
+    .flow { padding: 4px 0 10px; }
     .flow-hub-row { gap: 6px; flex-wrap: wrap; justify-content: center; }
     .flow-node { padding: 8px 10px; flex: 1 1 70px; }
     .flow-node-icon { width: 32px; height: 32px; border-radius: 9px; }
@@ -943,6 +945,7 @@ body {
     .flow-arrow-col { height: 20px; }
     .flow-arrow-side { width: 20px; }
     .flow-arrow svg { width: 20px; height: 20px; }
+    .inverter-node { flex: 1.1 1 70px; }
     .flow-node-sub { display: none; }
 }
 @media (max-width: 360px) {
@@ -956,6 +959,7 @@ body {
     .flow-arrow-col { height: 16px; }
     .flow-arrow-side { width: 16px; }
     .flow-arrow svg { width: 16px; height: 16px; }
+    .inverter-node { flex: 1.0 1 55px; }
 }
 
 @media (max-width: 640px) {
