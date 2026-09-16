@@ -14,13 +14,18 @@ This layer knows NOTHING about the GUI or the API. It only:
 Layers above consume the result of get_raw_snapshot().
 """
 
+import socket
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException, ConnectionException
 
-from .config import CONFIG, POLL_INTERVAL, DEMO_MODE
+from .config import (
+    CONFIG, POLL_INTERVAL, DEMO_MODE,
+    DISCOVERY_ENABLED, DISCOVERY_AFTER, DISCOVERY_INTERVAL,
+)
 from . import registers as regmap
 
 
@@ -38,6 +43,9 @@ class ModbusReader:
         # logger cannot cause a connect storm across the register reads.
         self._next_connect_attempt = 0.0
         self._connect_backoff = 1.0
+        # LAN auto-discovery state (handles the logger's DHCP lease moving).
+        self._connect_fail_since = None
+        self._last_discovery = 0.0
 
         # Latest raw snapshot: {key: list_of_register_values | None}
         self._raw = {}
@@ -58,17 +66,78 @@ class ModbusReader:
     # ------------------------------------------------------------------
     # Client management
     # ------------------------------------------------------------------
+    def _discover_host(self):
+        """Scan the local subnet for the Solis logger and adopt it.
+
+        Used only after the configured host has been unreachable for a while,
+        so a changed DHCP lease self-heals. Returns the discovered IP or None.
+        """
+        host = self._config["host"]
+        try:
+            socket.inet_aton(host)
+        except OSError:
+            return None                       # not an IPv4 address
+        subnet = host.rsplit(".", 1)[0]
+        port = self._config["port"]
+        slave = self._config["slave_id"]
+
+        def probe(ip):
+            if ip == host:
+                return None
+            try:
+                with socket.create_connection((ip, port), timeout=0.4):
+                    pass
+            except OSError:
+                return None
+            try:
+                cli = ModbusTcpClient(ip, port=port, timeout=1.5)
+                if cli.connect():
+                    res = cli.read_input_registers(
+                        address=33049, count=1, device_id=slave
+                    )
+                    cli.close()
+                    if not res.isError():
+                        return ip
+            except Exception:
+                pass
+            return None
+
+        ips = [f"{subnet}.{i}" for i in range(1, 255)]
+        try:
+            with ThreadPoolExecutor(max_workers=64) as pool:
+                for found in pool.map(probe, ips):
+                    if found:
+                        return found
+        except Exception:
+            return None
+        return None
+
     def _get_client(self):
         """Return a connected client, reconnecting if needed.
 
-        Reconnection is throttled with exponential backoff so an offline
-        logger cannot trigger one connect attempt per register read.
+        Reconnection is throttled with exponential backoff so an offline logger
+        cannot trigger one connect attempt per register read. If the host has
+        been unreachable for a while, a LAN scan is attempted so a changed
+        DHCP lease self-heals.
         """
         if self._client is not None and self.connected:
             return self._client
         now = time.time()
         if now < self._next_connect_attempt:
             return self._client
+
+        # Self-heal: find the logger again if it moved on the network.
+        if (DISCOVERY_ENABLED and self._connect_fail_since is not None
+                and now - self._connect_fail_since >= DISCOVERY_AFTER
+                and now - self._last_discovery >= DISCOVERY_INTERVAL):
+            self._last_discovery = now
+            found = self._discover_host()
+            if found and found != self._config["host"]:
+                self._config["host"] = found
+                self._next_connect_attempt = 0.0
+                self._connect_backoff = 1.0
+                now = time.time()
+
         try:
             if self._client is not None:
                 self._client.close()
@@ -86,7 +155,10 @@ class ModbusReader:
         with self._lock:
             if self.connected:
                 self._connect_backoff = 1.0
+                self._connect_fail_since = None
             else:
+                if self._connect_fail_since is None:
+                    self._connect_fail_since = now
                 self._stats["connection_errors"] += 1
                 self._stats["last_error_time"] = time.time()
                 self._stats["last_error_message"] = "TCP connection failed"

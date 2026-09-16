@@ -13,6 +13,22 @@ PC → 192.168.1.45:502 → S2-WL-ST → RS485 → S6-EH1P6K-L-PLUS
 > `.46` to `.45` on 2026-09-16). Override without editing code by setting
 > `SOLIS_HOST` / `SOLIS_PORT` in the environment, e.g. in the systemd unit
 > or a shell: `SOLIS_HOST=192.168.1.x python run_server.py`.
+>
+> **Self-healing:** if the configured host stops answering for
+> `SOLIS_DISCOVERY_AFTER` seconds (default 30), the poller scans the
+> `/24` subnet for a Modbus device answering the PV1-voltage register and
+> adopts the first one it finds. Disable with `SOLIS_DISCOVERY=0`; adjust
+> the interval with `SOLIS_DISCOVERY_INTERVAL` (default 300 s). A DHCP
+> reservation is still the most reliable fix.
+
+## Running on boot
+
+The app runs as a **systemd user service** (`solis-monitor.service`, created
+outside the repo) with `Restart=always`, `StartLimitIntervalSec=0`, and
+linger enabled, so it starts automatically at boot (no login required) and
+is restarted forever if it crashes or the network is not ready yet. The
+poller and cloud sync retry on their own, so a reboot recovers without
+manual intervention.
 
 ## Two Applications
 

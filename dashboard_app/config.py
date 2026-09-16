@@ -24,6 +24,16 @@ CONFIG = {
 # How often the background poller reads the inverter (seconds)
 POLL_INTERVAL = 2.0
 
+# Optional LAN auto-discovery. The logger's DHCP lease can change (it has
+# happened before), so if the configured host stops answering, the poller can
+# scan the subnet for a Modbus device that answers the PV1-voltage register
+# and adopt it. Disable with SOLIS_DISCOVERY=0.
+DISCOVERY_ENABLED = os.environ.get("SOLIS_DISCOVERY", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+DISCOVERY_AFTER = float(os.environ.get("SOLIS_DISCOVERY_AFTER", "30"))     # s offline before scanning
+DISCOVERY_INTERVAL = float(os.environ.get("SOLIS_DISCOVERY_INTERVAL", "300"))  # s between scans
+
 # Grid is considered connected when grid voltage is above this threshold (V)
 GRID_CONNECTED_THRESHOLD_V = 50.0
 
