@@ -190,6 +190,64 @@ class DataLogger:
             conn.close()
         return rows
 
+    def query_buckets(self, start_unix=None, end_unix=None, buckets=240):
+        """Aggregate readings into `buckets` time buckets, oldest first.
+
+        Returns one dict per non-empty bucket with averaged columns (the
+        same column names as the raw rows) plus:
+            bucket_ts    : timestamp of the first sample in the bucket
+            ts_unix      : alias of bucket_ts (so the charts can reuse rows)
+            samples      : number of raw rows in the bucket
+            grid_seconds : estimated seconds the grid was connected
+            pv_power_max : peak PV power within the bucket
+
+        If start/end are omitted the full recorded range is used, so the
+        History page can show everything from the first record to now.
+        """
+        buckets = max(1, int(buckets))
+        conn = self._connect()
+        try:
+            if start_unix is None or end_unix is None:
+                lo, hi = conn.execute(
+                    "SELECT MIN(ts_unix), MAX(ts_unix) FROM readings"
+                ).fetchone()
+                if lo is None:
+                    return []
+                if start_unix is None:
+                    start_unix = lo
+                if end_unix is None:
+                    end_unix = hi
+
+            span = float(end_unix) - float(start_unix)
+            if span <= 0:
+                span = 1.0
+            width = span / buckets
+
+            cols = [c for _, c in FIELDS]
+            avg_cols = ", ".join(f"AVG({c}) AS {c}" for c in cols)
+            sql = (
+                "SELECT MIN(ts_unix) AS bucket_ts, "
+                "COUNT(*) AS samples, "
+                "SUM(CASE WHEN grid_voltage >= 50 THEN 1 ELSE 0 END) * ? AS grid_seconds, "
+                f"{avg_cols}, MAX(pv_power) AS pv_power_max "
+                "FROM readings "
+                "WHERE ts_unix >= ? AND ts_unix <= ? "
+                "GROUP BY CAST((ts_unix - ?) / ? AS INTEGER) "
+                "ORDER BY bucket_ts"
+            )
+            cur = conn.execute(
+                sql, (width, start_unix, end_unix, start_unix, width)
+            )
+            names = ["bucket_ts", "samples", "grid_seconds", *cols, "pv_power_max"]
+            rows = []
+            for r in cur.fetchall():
+                row = dict(zip(names, r))
+                row["ts_unix"] = row["bucket_ts"]
+                rows.append(row)
+            return rows
+        finally:
+            conn.close()
+
     def min_max_time(self):
         """Return (first_ts, last_ts) recorded in the database, or None."""
         conn = self._connect()

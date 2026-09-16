@@ -157,6 +157,23 @@ def create_app():
             "total_rows": data_logger.logger.count(),
         })
 
+    @app.route("/api/history/buckets")
+    def api_history_buckets():
+        """Downsampled history for full-range charts.
+
+        Query params:
+          buckets : number of time buckets (default 240, max 2000)
+          start   : UNIX timestamp (optional) — default = first record
+          end     : UNIX timestamp (optional) — default = latest record
+        Returns one aggregated row per non-empty bucket, oldest first.
+        """
+        buckets = request.args.get("buckets", default=240, type=int)
+        buckets = max(1, min(buckets, 2000))
+        start = request.args.get("start", default=None, type=float)
+        end = request.args.get("end", default=None, type=float)
+        rows = data_logger.logger.query_buckets(start, end, buckets)
+        return jsonify({"count": len(rows), "rows": rows})
+
     # Start the background poller and data logger when the app is created.
     modbus_layer.start_poller()
     data_logger.start_logger()

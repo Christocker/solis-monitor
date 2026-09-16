@@ -173,15 +173,17 @@ function initCharts() {
 let currentView = "minutes";
 
 const VIEWS = {
-    seconds: { label: "Seconds", window: 600,     points: 120 },  // 10 min @ 5s
-    minutes: { label: "Minutes", window: 10800,   points: 180 },  //  3 h  @ 1 min
-    hours:   { label: "Hours",   window: 604800,  points: 168 },  //  7 d  @ 1 h
-    days:    { label: "Days",    window: 2592000, points: 30 },   // 30 d  @ 1 day
+    seconds: { label: "Seconds", window: 600,     points: 120, raw: true },      // 10 min @ 2s
+    minutes: { label: "Minutes", window: 10800,   points: 180, buckets: 360 },   //  3 h
+    hours:   { label: "Hours",   window: 604800,  points: 168, buckets: 336 },   //  7 d
+    days:    { label: "Days",    window: 2592000, points: 120, buckets: 360 },   // 30 d
+    all:     { label: "All",     window: null,    points: 240, buckets: 480 },   // first record -> now
 };
 
 function viewRange(view) {
-    const now = Date.now() / 1000;
     const w = VIEWS[view].window;
+    if (w == null) return { start: null, end: null };   // full recorded range
+    const now = Date.now() / 1000;
     return { start: now - w, end: now };
 }
 
@@ -193,6 +195,7 @@ function timeLabel(ts, view) {
         case "seconds": return hh + ":" + mm + ":" + ss;
         case "minutes": return hh + ":" + mm;
         case "hours": return (d.getMonth() + 1) + "/" + d.getDate() + " " + hh + ":00";
+        case "all": return (d.getMonth() + 1) + "/" + d.getDate() + " " + hh + ":" + mm;
         default: return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     }
 }
@@ -232,17 +235,32 @@ function sumEnergy(rows, col) {
 
 function maxOf(rows, col) {
     let m = 0;
-    for (const r of rows) if (r[col] != null && r[col] > m) m = r[col];
+    for (const r of rows) {
+        const v = (col === "pv_power" && r.pv_power_max != null) ? r.pv_power_max : r[col];
+        if (v != null && v > m) m = v;
+    }
     return m;
 }
 
 function avgOf(rows, col) {
-    let sum = 0, count = 0;
-    for (const r of rows) if (r[col] != null) { sum += r[col]; count++; }
-    return count ? sum / count : 0;
+    // Weighted average when rows are aggregated buckets (r.samples = raw count).
+    let sum = 0, weight = 0;
+    for (const r of rows) {
+        if (r[col] == null) continue;
+        const w = (r.samples != null) ? r.samples : 1;
+        sum += r[col] * w;
+        weight += w;
+    }
+    return weight ? sum / weight : 0;
 }
 
 function gridMinutes(rows) {
+    // Bucketed rows carry the grid-connected seconds for the bucket directly.
+    if (rows.length && rows[0].grid_seconds != null) {
+        let secs = 0;
+        for (const r of rows) secs += (r.grid_seconds || 0);
+        return Math.round(secs / 60);
+    }
     let secs = 0;
     for (let i = 1; i < rows.length; i++) {
         const v1 = rows[i - 1].grid_voltage, v2 = rows[i].grid_voltage;
@@ -283,17 +301,28 @@ function renderCharts(rows, view) {
 async function loadHistory() {
     const statusEl = document.getElementById("history-status");
     statusEl.textContent = "Loading...";
+    const view = VIEWS[currentView];
     const rng = viewRange(currentView);
+    const onProgress = view.raw ? null : (done, total) => {
+        statusEl.textContent = "Loading " + done + "/" + total + "...";
+    };
     try {
-        const rows = await fetchReadings(rng.start, rng.end, 10000);
+        const rows = view.raw
+            ? await fetchReadings(rng.start, rng.end, 10000)
+            : await fetchHistoryBuckets(rng.start, rng.end, view.buckets, onProgress);
         if (!rows || rows.length === 0) {
             statusEl.textContent = "No recorded data in this range yet.";
             return;
         }
         renderCharts(rows, currentView);
-        statusEl.textContent = rows.length + " samples";
+        statusEl.textContent = rows.length + (view.raw ? " samples" : " buckets");
     } catch (err) {
-        statusEl.textContent = "Error loading history";
+        if (err && err.rpcUnavailable) {
+            statusEl.textContent =
+                "Full history needs supabase/schema.sql (history_buckets)";
+        } else {
+            statusEl.textContent = "Error loading history";
+        }
         console.error(err);
     }
 }
@@ -313,5 +342,12 @@ document.addEventListener("DOMContentLoaded", () => {
     initCharts();
     setupViewButtons();
     loadHistory();
-    setInterval(loadHistory, 30000);
+    // Auto-refresh only the short, cheap ranges. Larger ranges (hours / days /
+    // all) are aggregated server-side and are loaded on demand when selected,
+    // so a 30s timer does not hammer Supabase.
+    setInterval(() => {
+        if (currentView === "seconds" || currentView === "minutes") {
+            loadHistory();
+        }
+    }, 30000);
 });

@@ -144,10 +144,10 @@ function updateFlow(snapshot) {
     // Node values (only show when available)
     setValue("flow-solar-w", pvPower === null ? "--" : pvPower.toFixed(0) + " W");
     setValue("flow-load-w", loadPower === null ? "--" : loadPower.toFixed(0) + " W");
-    // Battery: after normalize.py negation, positive = discharging (power out),
-    // negative = charging (power into battery).
+    // Battery: positive = discharging (power out), negative = charging (power in).
     setValue("flow-batt-w", battPower === null ? "--"
-        : (battPower > 0 ? "out " : "in ") + Math.abs(battPower).toFixed(0) + " W");
+        : (Math.round(Math.abs(battPower)) === 0 ? "0 W"
+           : (battPower > 0 ? "out " : "in ") + Math.abs(battPower).toFixed(0) + " W"));
     // Grid node value: show connection state; power only when we have it.
     if (gridConnected === false) {
         setValue("flow-grid-w", "DISCONNECTED");
@@ -158,55 +158,62 @@ function updateFlow(snapshot) {
     }
     // Inverter is the central hub — no value shown.
 
-    // ---- Arrow directions ----
-    // Solar -> Inverter: active when PV producing.
-    setArrow("flow-solar-inv", pvPower !== null && pvPower > 0, "pv", "down");
+    // ---- Connectors ----
+    // Each link has a fixed axis; energy flows toward its destination:
+    //   solar   : vertical, flows DOWN into the hub
+    //   grid    : vertical, import flows UP into the hub, export DOWN to grid
+    //   battery : horizontal (node sits left of the hub)
+    //   load    : horizontal (node sits right of the hub)
+    setLink("flow-solar-inv", "down", pvPower, "pv");
+    setLink("flow-inv-load", "right", loadPower, "load");
 
-    // Inverter -> Load: active when load consuming.
-    setArrow("flow-inv-load", loadPower !== null && loadPower > 0, "load", "right");
-
-    // Battery <-> Inverter direction.
-    //   Positive = DISCHARGING (battery -> inverter, arrow right).
-    //   Negative = CHARGING (inverter -> battery, arrow left).
+    // Battery: positive power = discharging (battery -> hub, flows right),
+    // negative = charging (hub -> battery — the flow points AT the battery).
     const battDir = battPower !== null ? Math.sign(battPower)
                   : (battCurrent !== null ? Math.sign(battCurrent) : 0);
-    if (battDir > 0) {
-        setArrow("flow-batt-inv", true, "batt", "right");    // discharging: battery -> hub
+    if (battPower === null && battCurrent === null) {
+        setLink("flow-batt-inv", "right", null, "batt");
     } else if (battDir < 0) {
-        setArrow("flow-batt-inv", true, "batt", "left");     // charging: hub -> battery
+        setLink("flow-batt-inv", "left", 1, "batt");     // charging -> INTO battery
+    } else if (battDir > 0) {
+        setLink("flow-batt-inv", "right", 1, "batt");    // discharging -> into hub
     } else {
-        setArrow("flow-batt-inv", false, "batt", "hide");
+        setLink("flow-batt-inv", "right", 0, "batt");    // idle -> plain line
     }
 
-    // Grid <-> Inverter: only show directional flow when grid import/export
-    // power is actually available. When just connected, show a plain line.
-    if (gridConnected === true && gridPower !== null && gridPower > 0) {
-        setArrow("flow-inv-grid", true, "grid", "up");       // import: grid -> hub
-    } else if (gridConnected === true && gridPower !== null && gridPower < 0) {
-        setArrow("flow-inv-grid", true, "grid", "down");     // export: hub -> grid
+    // Grid.
+    if (gridConnected === false) {
+        setLink("flow-inv-grid", "up", null, "grid", "offline");
+    } else if (gridPower !== null && gridPower > 0) {
+        setLink("flow-inv-grid", "up", 1, "grid");       // import -> into hub
+    } else if (gridPower !== null && gridPower < 0) {
+        setLink("flow-inv-grid", "down", 1, "grid");     // export -> to grid
     } else if (gridConnected === true) {
-        setArrow("flow-inv-grid", false, "grid", "line");    // connected: plain line
+        setLink("flow-inv-grid", "up", 0, "grid");       // connected, idle -> line
     } else {
-        setArrow("flow-inv-grid", false, "grid", "hide");    // disconnected: hidden
+        setLink("flow-inv-grid", "up", null, "grid");
     }
 }
 
-function setArrow(id, active, colorClass, direction) {
+// Draw one connector.
+//   direction : fixed axis + flow direction ("up" | "down" | "left" | "right")
+//   power     : null = unknown (hidden), 0 = idle (plain line),
+//               > 0 = flowing (animated dashes + comet + arrowhead)
+//   mode      : "offline" = faint dashed line (grid disconnected)
+function setLink(id, direction, power, colorClass, mode) {
     const el = document.getElementById(id);
     if (!el) return;
-    const arrow = el.querySelector(".flow-arrow");
-    if (!arrow) return;
-    if (direction === "hide") {
-        arrow.className = "flow-arrow hidden";
-        return;
-    }
-    if (direction === "line") {
-        arrow.className = "flow-arrow line";
-        return;
-    }
-    arrow.className = "flow-arrow " + direction;
-    if (active) {
-        arrow.classList.add("active", colorClass);
+    const link = el.querySelector(".flow-arrow");
+    if (!link) return;
+    link.className = "flow-arrow " + direction;
+    if (mode === "offline") {
+        link.classList.add("offline");
+    } else if (power === null) {
+        link.classList.add("hidden");
+    } else if (power > 0) {
+        link.classList.add("active", colorClass);
+    } else {
+        link.classList.add("line");
     }
 }
 

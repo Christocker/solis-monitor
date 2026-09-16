@@ -48,6 +48,19 @@ async function fetchReadings(startUnix, endUnix, limit) {
     return rows;
 }
 
+// Fetch downsampled history: the server aggregates readings into ~buckets
+// time buckets (one row each) so the full history can be charted in one
+// request. start/end may be null to cover everything from the first record.
+async function fetchHistoryBuckets(startUnix, endUnix, buckets) {
+    const params = new URLSearchParams({ buckets: buckets });
+    if (startUnix != null) params.set("start", startUnix);
+    if (endUnix != null) params.set("end", endUnix);
+    const data = await fetchJSON("/api/history/buckets?" + params.toString());
+    const rows = (data && data.rows) || [];
+    rows.sort((a, b) => a.ts_unix - b.ts_unix);
+    return rows;
+}
+
 // Update the sidebar global status pill based on snapshot.
 function updateGlobalStatus(snapshot) {
     const el = document.getElementById("global-status");

@@ -6,11 +6,16 @@ The Phase 1 diagnostic tool keeps its own copy of these values so it
 can remain fully independent.
 """
 
-# Modbus TCP connection to the S2-WL-ST data logger
+import os
+
+# Modbus TCP connection to the S2-WL-ST data logger.
+# The logger gets its address over DHCP, so it can move. Override without
+# editing code by setting SOLIS_HOST / SOLIS_PORT in the environment
+# (e.g. in the systemd unit or a .env file).
 CONFIG = {
-    "host": "192.168.1.46",
-    "port": 502,
-    "slave_id": 1,
+    "host": os.environ.get("SOLIS_HOST", "192.168.1.45"),
+    "port": int(os.environ.get("SOLIS_PORT", "502")),
+    "slave_id": int(os.environ.get("SOLIS_SLAVE_ID", "1")),
     "timeout": 3,          # seconds
     "retries": 2,
     "retry_delay": 1.0,    # seconds between retries

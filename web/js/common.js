@@ -68,6 +68,113 @@ async function fetchReadings(startUnix, endUnix, limit) {
     return rows;
 }
 
+// Fetch downsampled history via the Supabase RPC `history_buckets`, which
+// aggregates the raw table into ~buckets rows server-side (the API caps raw
+// responses at 1000 rows). start/end may be omitted to cover the full range.
+//
+// A whole-month scan can exceed the API statement timeout, so the range is
+// split into ~2-day chunks (each comfortably under the limit) and merged.
+// Chunks run a couple at a time to avoid overloading the database, and any
+// chunk that still times out is split further.
+const HISTORY_CHUNK_SECONDS = 2 * 24 * 3600;
+const HISTORY_CONCURRENCY = 2;
+
+async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
+    let s = startUnix, e = endUnix;
+    if (s == null || e == null) {
+        const bounds = await fetchReadingsBounds();
+        if (!bounds) return [];
+        if (s == null) s = bounds.min;
+        if (e == null) e = bounds.max;
+    }
+    if (!(e > s)) return await historyBucketsCall(s, e, buckets);
+
+    const span = e - s;
+    const n = Math.max(1, Math.ceil(span / HISTORY_CHUNK_SECONDS));
+    if (n === 1) return await historyBucketsCall(s, e, buckets);
+
+    const jobs = [];
+    for (let i = 0; i < n; i++) {
+        const cs = s + (span * i) / n;
+        const ce = (i === n - 1) ? e : s + (span * (i + 1)) / n;
+        const cb = Math.max(1, Math.round(buckets / n));
+        jobs.push(() => historyBucketsCall(cs, ce, cb));
+    }
+    const results = await runLimited(jobs, HISTORY_CONCURRENCY, onProgress);
+    const rows = [].concat(...results);
+    rows.sort((a, b) => a.ts_unix - b.ts_unix);
+    return rows;
+}
+
+// Run async jobs with a cap on how many run at once.
+async function runLimited(jobs, limit, onProgress) {
+    const results = new Array(jobs.length);
+    let next = 0, done = 0;
+    async function worker() {
+        while (next < jobs.length) {
+            const i = next++;
+            results[i] = await jobs[i]();
+            done++;
+            if (onProgress) onProgress(done, jobs.length);
+        }
+    }
+    const workers = [];
+    for (let i = 0; i < Math.min(limit, jobs.length); i++) workers.push(worker());
+    await Promise.all(workers);
+    return results;
+}
+
+// One RPC call; on a timeout, split the range in half and retry.
+async function historyBucketsCall(startUnix, endUnix, buckets) {
+    try {
+        return await historyBucketsRpc(startUnix, endUnix, buckets);
+    } catch (err) {
+        if (err.rpcUnavailable) throw err;
+        const span = endUnix - startUnix;
+        if (!err.retryable || span < 3600) throw err;
+        const mid = startUnix + span / 2;
+        const b1 = Math.max(1, Math.round(buckets / 2));
+        const b2 = Math.max(1, buckets - b1);
+        const [a, b] = await Promise.all([
+            historyBucketsCall(startUnix, mid, b1),
+            historyBucketsCall(mid, endUnix, b2),
+        ]);
+        return a.concat(b);
+    }
+}
+
+async function historyBucketsRpc(startUnix, endUnix, buckets) {
+    const body = { p_start: startUnix, p_end: endUnix, p_buckets: buckets };
+    const res = await fetch(SUPABASE_URL + "/rest/v1/rpc/history_buckets", {
+        method: "POST",
+        headers: supabaseHeaders(),
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+        const err = new Error("Supabase RPC HTTP " + res.status);
+        if (res.status === 404) err.rpcUnavailable = true;
+        else err.retryable = true;
+        throw err;
+    }
+    const rows = await res.json();
+    rows.forEach((r) => { r.ts_unix = r.bucket_ts; });
+    return rows;
+}
+
+// First and last recorded timestamps (for the full-range "All" view).
+async function fetchReadingsBounds() {
+    const base = SUPABASE_URL + "/rest/v1/readings?select=ts_unix&limit=1&order=";
+    const [minRes, maxRes] = await Promise.all([
+        fetch(base + "ts_unix.asc", { headers: supabaseHeaders() }),
+        fetch(base + "ts_unix.desc", { headers: supabaseHeaders() }),
+    ]);
+    if (!minRes.ok || !maxRes.ok) throw new Error("Supabase HTTP " + minRes.status);
+    const [minRow] = await minRes.json();
+    const [maxRow] = await maxRes.json();
+    if (!minRow || !maxRow) return null;
+    return { min: minRow.ts_unix, max: maxRow.ts_unix };
+}
+
 // Count readings (for the meta endpoint).
 async function countReadings() {
     const url = SUPABASE_URL + "/rest/v1/readings?select=id";

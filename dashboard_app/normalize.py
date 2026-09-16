@@ -130,23 +130,17 @@ def build_snapshot(raw, errors, identification):
     }
 
     # ---------------- Battery ----------------
-    # The ESINV-33000ID register convention is:
-    #   positive current/power = CHARGING (inverter charging battery)
-    #   negative current/power = DISCHARGING (battery supplying system)
-    # The JS dashboard interprets: positive = discharging, negative = charging.
-    # We negate the register values so the JS sees:
-    #   positive → discharging (battery → inverter, arrow right)
-    #   negative → charging (inverter → battery, arrow left)
-    bat_i = field("battery_current")
-    bat_p = field("battery_power")
-    if bat_i["state"] == "available" and bat_i["value"] is not None:
-        bat_i["value"] = -bat_i["value"]
-    if bat_p["state"] == "available" and bat_p["value"] is not None:
-        bat_p["value"] = -bat_p["value"]
+    # The ESINV-33000ID registers report battery current/power as:
+    #   positive = DISCHARGING (battery supplying the system)
+    #   negative = CHARGING (inverter charging the battery)
+    # Cross-checked on 2026-09-16: register 33135 "battery direction" read
+    # 1 (discharge) while battery current/power read +10.0 A / +627 W with
+    # the grid disconnected. Values are therefore passed through unchanged;
+    # the dashboard interprets positive as discharging (arrow battery -> hub).
     battery = {
         "voltage": field("battery_voltage"),
-        "current": bat_i,
-        "power": bat_p,
+        "current": field("battery_current"),
+        "power": field("battery_power"),
         "soc": field("battery_soc"),
         "soh": field("battery_soh"),
     }

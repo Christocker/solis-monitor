@@ -4,9 +4,10 @@ Reads the confirmed S6-EH1P register map (ESINV-33000ID protocol).
 All Function 04 (Input Registers), no offset.
 """
 from pymodbus.client import ModbusTcpClient
+import os
 import struct
 
-client = ModbusTcpClient("192.168.1.46", port=502, timeout=3)
+client = ModbusTcpClient(os.environ.get("SOLIS_HOST", "192.168.1.45"), port=502, timeout=3)
 client.connect()
 
 

@@ -6,8 +6,13 @@ inverter, accessed via the **Solis S2-WL-ST** data logger over Modbus TCP.
 ## Communication Path
 
 ```
-PC → 192.168.1.46:502 → S2-WL-ST → RS485 → S6-EH1P6K-L-PLUS
+PC → 192.168.1.45:502 → S2-WL-ST → RS485 → S6-EH1P6K-L-PLUS
 ```
+
+> The S2-WL-ST gets its address over DHCP and can change (it moved from
+> `.46` to `.45` on 2026-09-16). Override without editing code by setting
+> `SOLIS_HOST` / `SOLIS_PORT` in the environment, e.g. in the systemd unit
+> or a shell: `SOLIS_HOST=192.168.1.x python run_server.py`.
 
 ## Two Applications
 
@@ -100,8 +105,11 @@ using the public anon key). No server needed on Vercel.
 Pages:
 - **Dashboard** — live cards (Solar, Battery, Grid, Load), energy-flow
   visualization, energy statistics
-- **History** — charts of recorded data (PV power, load power, battery SOC,
-  battery power) with ranges: Today / Yesterday / 7 Days / 30 Days / All
+- **History** — charts of recorded data with ranges:
+  **Seconds / Minutes / Hours / Days / All**. "All" spans everything from
+  the first recorded sample to now. Ranges larger than a few hours are
+  fetched through a downsampling function so the full period can be
+  charted in a single request (see "Full history" below).
 - **System** — system info, connection settings, register diagnostics table
 
 ## Data Logger (SQLite)
@@ -121,13 +129,36 @@ battery_power, battery_soc, battery_soh, house_load, backup_load`
 Rows with unavailable values store `NULL` (never fabricated).
 
 The API exposes recorded data at `GET /api/history?limit=200` (returns
-the most recent rows, newest first) for future History/charts use.
+the most recent rows, newest first) and downsampled history at
+`GET /api/history/buckets?buckets=480&start=&end=` (one aggregated row per
+time bucket; omitting start/end covers everything from the first record).
 
 To view the data directly (e.g. from a terminal):
 
 ```
 python -c "import sqlite3; c=sqlite3.connect('solis_history.db'); print(c.execute('SELECT ts_iso,pv_power,battery_soc,grid_voltage,house_load,backup_load FROM readings ORDER BY id DESC LIMIT 10').fetchall())"
 ```
+
+## Full history (cloud)
+
+The cloud `readings` table keeps **every** raw row (one per ~2 s, about
+**1.2M rows/month**). Because the Supabase REST API returns at most **1000
+rows per request**, the History page cannot page through a whole month of
+raw rows. Instead, the website fetches large ranges through a Postgres
+function, `public.history_buckets(...)`, which aggregates the raw rows into
+a fixed number of time buckets in a single request. The raw data is left
+untouched, so nothing is lost.
+
+This function is part of `supabase/schema.sql`. If the History page shows
+**"Full history needs supabase/schema.sql (history_buckets)"**, run that
+file once in the Supabase SQL Editor (it is idempotent and safe to re-run).
+
+> **Storage note:** raw 2 s data is ~200 MB/month. The Supabase Free tier
+> includes 500 MB, so the database fills in roughly two months. Monitor
+> Database size in the Supabase dashboard, and either upgrade the plan or
+> reduce the sync cadence (`SYNC_INTERVAL` in `dashboard_app/cloud_sync.py`).
+> The laptop always keeps the complete raw history locally in
+> `solis_history.db`.
 
 ## Architecture (4 layers)
 

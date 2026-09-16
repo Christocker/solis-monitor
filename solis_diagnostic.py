@@ -9,11 +9,14 @@ S2-WL-ST data logger to the Solis inverter, read identification
 data, and confirm we can correctly decode Modbus registers.
 
 Communication Path:
-    PC → 192.168.1.46:502 (S2-WL-ST) → RS485 → S6-EH1P6K-L-PLUS
+    PC → 192.168.1.45:502 (S2-WL-ST) → RS485 → S6-EH1P6K-L-PLUS
 
 Usage:
     python solis_diagnostic.py
+    SOLIS_HOST=192.168.1.x python solis_diagnostic.py   # override the IP
 """
+
+import os
 
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException, ConnectionException
@@ -26,7 +29,7 @@ import time
 # ===========================================================================
 
 CONFIG = {
-    "host": "192.168.1.46",
+    "host": os.environ.get("SOLIS_HOST", "192.168.1.45"),
     "port": 502,
     "slave_id": 1,
     "timeout": 3,          # seconds
@@ -415,10 +418,11 @@ def main():
         print()
         print("   TROUBLESHOOTING:")
         print("   - Is the S2-WL-ST powered on?")
-        print("   - Is 192.168.1.46 the correct IP?")
+        print(f"   - Is {CONFIG['host']} the correct IP? "
+              "(the logger gets its address over DHCP and may move)")
         print("   - Is port 502 open?")
         print("   - Is your PC on the same network (192.168.1.x)?")
-        print("   - Try: Test-NetConnection 192.168.1.46 -Port 502")
+        print(f"   - Try: Test-NetConnection {CONFIG['host']} -Port 502")
         print()
         print("=" * 48)
         print(" RESULT: COMMUNICATION FAILURE")
