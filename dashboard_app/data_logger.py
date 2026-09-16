@@ -104,10 +104,6 @@ class DataLogger:
         now = time.time()
         ts_iso = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
 
-        def get(cat_key):
-            # snapshot keys: solar.pv1_voltage etc. We map via FIELDS.
-            return None
-
         row = [now, ts_iso]
 
         # Map each field from the snapshot.
@@ -171,21 +167,32 @@ class DataLogger:
             conn.close()
         return rows
 
-    def query_range(self, start_unix, end_unix, columns=None):
-        """Return all rows within a UNIX time window, oldest first.
+    def query_range(self, start_unix, end_unix, columns=None, limit=None):
+        """Return rows within a UNIX time window, oldest first.
 
         columns: optional list of column names (from FIELDS). Default = all.
+        limit:   optional cap; keeps the most recent `limit` rows in the window.
         """
         cols = columns or [c for _, c in FIELDS]
         col_sql = ", ".join(cols)
         conn = self._connect()
         try:
-            cur = conn.execute(
-                f"SELECT ts_unix, ts_iso, {col_sql} FROM readings "
-                "WHERE ts_unix >= ? AND ts_unix <= ? ORDER BY ts_unix ASC",
-                (start_unix, end_unix),
-            )
-            rows = cur.fetchall()
+            if limit:
+                cur = conn.execute(
+                    f"SELECT ts_unix, ts_iso, {col_sql} FROM readings "
+                    "WHERE ts_unix >= ? AND ts_unix <= ? "
+                    "ORDER BY ts_unix DESC LIMIT ?",
+                    (start_unix, end_unix, int(limit)),
+                )
+                rows = cur.fetchall()
+                rows.reverse()
+            else:
+                cur = conn.execute(
+                    f"SELECT ts_unix, ts_iso, {col_sql} FROM readings "
+                    "WHERE ts_unix >= ? AND ts_unix <= ? ORDER BY ts_unix ASC",
+                    (start_unix, end_unix),
+                )
+                rows = cur.fetchall()
         finally:
             conn.close()
         return rows
@@ -215,20 +222,22 @@ class DataLogger:
         solar = consumption = charge = discharge = 0.0
         prev = None
         for ts, pv, batt, house, backup in rows:
-            load = (house or 0.0) + (backup or 0.0)
+            load = None
+            if house is not None or backup is not None:
+                load = (house or 0.0) + (backup or 0.0)
             if prev is not None:
                 dt = ts - prev[0]
                 if 0 < dt <= max_gap:
                     if prev[1] is not None and pv is not None:
                         solar += (prev[1] + pv) / 2.0 * dt
-                    if prev[3] is not None:  # load always has a value
-                        consumption += (prev[3] + load) / 2.0 * dt
                     if prev[2] is not None and batt is not None:
                         e = (prev[2] + batt) / 2.0 * dt
                         if e > 0:
                             discharge += e
                         else:
                             charge += -e
+                    if prev[3] is not None and load is not None:
+                        consumption += (prev[3] + load) / 2.0 * dt
             prev = (ts, pv, batt, load)
 
         kwh = 3_600_000.0
@@ -248,7 +257,9 @@ class DataLogger:
             bucket_ts    : timestamp of the first sample in the bucket
             ts_unix      : alias of bucket_ts (so the charts can reuse rows)
             samples      : number of raw rows in the bucket
-            grid_seconds : estimated seconds the grid was connected
+            bucket_width : nominal width of the bucket in seconds
+            grid_seconds : grid-connected seconds actually covered by the
+                           samples in this bucket (fraction x coverage)
             pv_power_max : peak PV power within the bucket
 
         If start/end are omitted the full recorded range is used, so the
@@ -275,20 +286,31 @@ class DataLogger:
 
             cols = [c for _, c in FIELDS]
             avg_cols = ", ".join(f"AVG({c}) AS {c}" for c in cols)
+            # grid_seconds = connected fraction x the time actually covered by
+            # the bucket's samples (span + one sample interval), so short or
+            # partial buckets are not credited a full nominal width.
+            coverage = (
+                "(MAX(ts_unix) - MIN(ts_unix)) * "
+                "(CASE WHEN COUNT(*) > 1 THEN COUNT(*) * 1.0 / (COUNT(*) - 1) "
+                "ELSE 0 END)"
+            )
             sql = (
                 "SELECT MIN(ts_unix) AS bucket_ts, "
                 "COUNT(*) AS samples, "
-                "SUM(CASE WHEN grid_voltage >= 50 THEN 1 ELSE 0 END) * ? AS grid_seconds, "
+                f"AVG(CASE WHEN grid_voltage >= 50 THEN 1.0 ELSE 0.0 END) * {coverage} "
+                "AS grid_seconds, "
+                "? AS bucket_width, "
                 f"{avg_cols}, MAX(pv_power) AS pv_power_max "
                 "FROM readings "
                 "WHERE ts_unix >= ? AND ts_unix <= ? "
-                "GROUP BY CAST((ts_unix - ?) / ? AS INTEGER) "
+                "GROUP BY MIN(CAST((ts_unix - ?) / ? AS INTEGER), ?) "
                 "ORDER BY bucket_ts"
             )
             cur = conn.execute(
-                sql, (width, start_unix, end_unix, start_unix, width)
+                sql, (width, start_unix, end_unix, start_unix, width, buckets - 1)
             )
-            names = ["bucket_ts", "samples", "grid_seconds", *cols, "pv_power_max"]
+            names = ["bucket_ts", "samples", "grid_seconds", "bucket_width",
+                     *cols, "pv_power_max"]
             rows = []
             for r in cur.fetchall():
                 row = dict(zip(names, r))

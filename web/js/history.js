@@ -1,5 +1,6 @@
 /* ============================================================
-   History page (web) — fetch readings from Supabase, render charts.
+   History page — fetch recorded readings (local API or Supabase via the
+   deployment-specific common.js) and render charts + summary statistics.
    Data-driven: every available field is charted with its unit.
    ============================================================ */
 
@@ -139,25 +140,30 @@ const CHART_DEFS = [
 ];
 
 /* ---------------- Stat definitions ---------------- */
+// Format a stat: numbers to 3 dp, but "—" when there is no data (never 0).
+function fmt3(v) {
+    return (v == null || isNaN(v)) ? NORMAL_DASH : Number(v).toFixed(3);
+}
+
 const STAT_DEFS = [
-    { id: "stat-pv-kwh", label: "PV Generation", unit: "kWh", fn: (rows) => sumEnergy(rows, "pv_power").toFixed(3) },
-    { id: "stat-pv-avg", label: "Avg PV Power", unit: "W", fn: (rows) => avgOf(rows, "pv_power").toFixed(3) },
-    { id: "stat-pv-peak", label: "Peak PV Power", unit: "W", fn: (rows) => maxOf(rows, "pv_power").toFixed(3) },
-    { id: "stat-pv1-v-avg", label: "Avg PV1 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv1_voltage").toFixed(3) },
-    { id: "stat-pv2-v-avg", label: "Avg PV2 Voltage", unit: "V", fn: (rows) => avgOf(rows, "pv2_voltage").toFixed(3) },
+    { id: "stat-pv-kwh", label: "PV Generation", unit: "kWh", fn: (rows) => fmt3(sumEnergy(rows, "pv_power")) },
+    { id: "stat-pv-avg", label: "Avg PV Power", unit: "W", fn: (rows) => fmt3(avgOf(rows, "pv_power")) },
+    { id: "stat-pv-peak", label: "Peak PV Power", unit: "W", fn: (rows) => fmt3(maxOf(rows, "pv_power")) },
+    { id: "stat-pv1-v-avg", label: "Avg PV1 Voltage", unit: "V", fn: (rows) => fmt3(avgOf(rows, "pv1_voltage")) },
+    { id: "stat-pv2-v-avg", label: "Avg PV2 Voltage", unit: "V", fn: (rows) => fmt3(avgOf(rows, "pv2_voltage")) },
 
-    { id: "stat-grid-v-avg", label: "Avg Grid Voltage", unit: "V", fn: (rows) => avgOf(rows, "grid_voltage").toFixed(3) },
-    { id: "stat-grid-f-avg", label: "Avg Grid Frequency", unit: "Hz", fn: (rows) => avgOf(rows, "grid_frequency").toFixed(3) },
-    { id: "stat-grid-time", label: "Grid Time", unit: "min", fn: (rows) => gridMinutes(rows).toFixed(3) },
+    { id: "stat-grid-v-avg", label: "Avg Grid Voltage", unit: "V", fn: (rows) => fmt3(avgOf(rows, "grid_voltage")) },
+    { id: "stat-grid-f-avg", label: "Avg Grid Frequency", unit: "Hz", fn: (rows) => fmt3(avgOf(rows, "grid_frequency")) },
+    { id: "stat-grid-time", label: "Grid Time", unit: "min", fn: (rows) => fmt3(gridMinutes(rows)) },
 
-    { id: "stat-batt-v-avg", label: "Avg Battery Voltage", unit: "V", fn: (rows) => avgOf(rows, "battery_voltage").toFixed(3) },
-    { id: "stat-batt-a-avg", label: "Avg Battery Current", unit: "A", fn: (rows) => avgOf(rows, "battery_current").toFixed(3) },
-    { id: "stat-batt-w-avg", label: "Avg Battery Power", unit: "W", fn: (rows) => avgOf(rows, "battery_power").toFixed(3) },
-    { id: "stat-soc-avg", label: "Avg Battery SOC", unit: "%", fn: (rows) => avgOf(rows, "battery_soc").toFixed(3) },
-    { id: "stat-soh-avg", label: "Avg Battery SOH", unit: "%", fn: (rows) => avgOf(rows, "battery_soh").toFixed(3) },
+    { id: "stat-batt-v-avg", label: "Avg Battery Voltage", unit: "V", fn: (rows) => fmt3(avgOf(rows, "battery_voltage")) },
+    { id: "stat-batt-a-avg", label: "Avg Battery Current", unit: "A", fn: (rows) => fmt3(avgOf(rows, "battery_current")) },
+    { id: "stat-batt-w-avg", label: "Avg Battery Power", unit: "W", fn: (rows) => fmt3(avgOf(rows, "battery_power")) },
+    { id: "stat-soc-avg", label: "Avg Battery SOC", unit: "%", fn: (rows) => fmt3(avgOf(rows, "battery_soc")) },
+    { id: "stat-soh-avg", label: "Avg Battery SOH", unit: "%", fn: (rows) => fmt3(avgOf(rows, "battery_soh")) },
 
-    { id: "stat-house-avg", label: "Avg House Load", unit: "W", fn: (rows) => avgOf(rows, "house_load").toFixed(3) },
-    { id: "stat-backup-avg", label: "Avg Backup Load", unit: "W", fn: (rows) => avgOf(rows, "backup_load").toFixed(3) },
+    { id: "stat-house-avg", label: "Avg House Load", unit: "W", fn: (rows) => fmt3(avgOf(rows, "house_load")) },
+    { id: "stat-backup-avg", label: "Avg Backup Load", unit: "W", fn: (rows) => fmt3(avgOf(rows, "backup_load")) },
 ];
 
 function initCharts() {
@@ -200,44 +206,73 @@ function timeLabel(ts, view) {
     }
 }
 
-function aggregate(rows, range, points, col) {
+function aggregate(rows, view, points, col) {
     if (rows.length === 0) return { labels: [], data: [] };
+    // Never create more buckets than there are rows, otherwise sparse ranges
+    // render as (invisible) isolated points on an otherwise blank chart.
+    const n = Math.min(points, rows.length);
     const first = rows[0].ts_unix;
     const last = rows[rows.length - 1].ts_unix;
     const span = Math.max(1, last - first);
-    const bucket = span / points;
+    const bucket = span / n;
     const labels = [], data = [];
-    for (let i = 0; i < points; i++) {
-        const bStart = first + i * bucket, bEnd = first + (i + 1) * bucket;
-        let sum = 0, count = 0;
+    for (let i = 0; i < n; i++) {
+        const bStart = first + i * bucket;
+        // The final bucket must include the newest row (bEnd == last).
+        const bEnd = (i === n - 1) ? last + 1 : first + (i + 1) * bucket;
+        let sum = 0, weight = 0;
         for (const r of rows) {
             if (r.ts_unix >= bStart && r.ts_unix < bEnd && r[col] != null) {
-                sum += r[col]; count++;
+                const w = (r.samples != null) ? r.samples : 1;
+                sum += r[col] * w;
+                weight += w;
             }
         }
-        labels.push(timeLabel(bStart, range));
-        data.push(count ? sum / count : null);
+        labels.push(timeLabel(bStart, view));
+        data.push(weight ? sum / weight : null);
     }
     return { labels, data };
 }
 
+// Largest interval we trust when integrating power. Bucketed rows carry the
+// server's bucket width; otherwise estimate the spacing from the series, or
+// fall back to 300 s for raw rows. Anything longer spans missing data and
+// must never fabricate energy.
+function _energyMaxGap(rows) {
+    if (rows.length && rows[0].bucket_width != null) {
+        return rows[0].bucket_width * 1.5;
+    }
+    if (rows.length > 1 && rows[0].samples != null) {
+        // Estimate bucket spacing robustly (median of consecutive gaps) and
+        // treat anything beyond 1.5x as a data gap rather than real flow.
+        const dts = [];
+        for (let i = 1; i < rows.length; i++) dts.push(rows[i].ts_unix - rows[i - 1].ts_unix);
+        dts.sort((a, b) => a - b);
+        const median = dts[Math.floor(dts.length / 2)];
+        return Math.max(1, median) * 1.5;
+    }
+    return 300;
+}
+
 function sumEnergy(rows, col) {
-    if (rows.length < 2) return 0;
+    if (rows.length < 2) return null;
+    const maxGap = _energyMaxGap(rows);
     let kwh = 0;
     for (let i = 1; i < rows.length; i++) {
         const p1 = rows[i - 1][col], p2 = rows[i][col];
         if (p1 == null || p2 == null) continue;
         const dt = rows[i].ts_unix - rows[i - 1].ts_unix;
+        if (!(dt > 0) || dt > maxGap) continue;
         kwh += ((p1 + p2) / 2) * dt / 3600 / 1000;
     }
     return kwh;
 }
 
 function maxOf(rows, col) {
-    let m = 0;
+    let m = null;
     for (const r of rows) {
         const v = (col === "pv_power" && r.pv_power_max != null) ? r.pv_power_max : r[col];
-        if (v != null && v > m) m = v;
+        if (v != null && (m === null || v > m)) m = v;
     }
     return m;
 }
@@ -251,7 +286,7 @@ function avgOf(rows, col) {
         sum += r[col] * w;
         weight += w;
     }
-    return weight ? sum / weight : 0;
+    return weight ? sum / weight : null;
 }
 
 function gridMinutes(rows) {
@@ -261,11 +296,14 @@ function gridMinutes(rows) {
         for (const r of rows) secs += (r.grid_seconds || 0);
         return Math.round(secs / 60);
     }
+    if (rows.length < 2) return null;
+    const maxGap = _energyMaxGap(rows);
     let secs = 0;
     for (let i = 1; i < rows.length; i++) {
+        const dt = rows[i].ts_unix - rows[i - 1].ts_unix;
         const v1 = rows[i - 1].grid_voltage, v2 = rows[i].grid_voltage;
-        if (v1 != null && v1 >= 50 && v2 != null && v2 >= 50)
-            secs += rows[i].ts_unix - rows[i - 1].ts_unix;
+        if (dt > 0 && dt <= maxGap && v1 != null && v1 >= 50 && v2 != null && v2 >= 50)
+            secs += dt;
     }
     return Math.round(secs / 60);
 }
@@ -298,25 +336,30 @@ function renderCharts(rows, view) {
     }
 }
 
+let loadToken = 0;
 async function loadHistory() {
+    const token = ++loadToken;
+    const viewKey = currentView;          // capture the view this load is for
+    const view = VIEWS[viewKey];
     const statusEl = document.getElementById("history-status");
     statusEl.textContent = "Loading...";
-    const view = VIEWS[currentView];
-    const rng = viewRange(currentView);
+    const rng = viewRange(viewKey);
     const onProgress = view.raw ? null : (done, total) => {
-        statusEl.textContent = "Loading " + done + "/" + total + "...";
+        if (token === loadToken) statusEl.textContent = "Loading " + done + "/" + total + "...";
     };
     try {
         const rows = view.raw
             ? await fetchReadings(rng.start, rng.end, 10000)
             : await fetchHistoryBuckets(rng.start, rng.end, view.buckets, onProgress);
+        if (token !== loadToken) return;  // superseded by a newer request
         if (!rows || rows.length === 0) {
             statusEl.textContent = "No recorded data in this range yet.";
             return;
         }
-        renderCharts(rows, currentView);
+        renderCharts(rows, viewKey);
         statusEl.textContent = rows.length + (view.raw ? " samples" : " buckets");
     } catch (err) {
+        if (token !== loadToken) return;
         if (err && err.rpcUnavailable) {
             statusEl.textContent =
                 "Full history needs supabase/schema.sql (history_buckets)";

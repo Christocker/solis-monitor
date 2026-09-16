@@ -113,6 +113,7 @@ returns table (
     bucket_ts double precision,
     samples bigint,
     grid_seconds double precision,
+    bucket_width double precision,
     pv_power double precision,
     pv1_voltage double precision,
     pv1_current double precision,
@@ -140,8 +141,11 @@ as $$
     ),
     b as (
         select
-            floor((r.ts_unix - bounds.s)
-                  / ((bounds.e - bounds.s) / bounds.n)) as bucket,
+            least(
+                floor((r.ts_unix - bounds.s)
+                      / ((bounds.e - bounds.s) / bounds.n)),
+                bounds.n - 1
+            ) as bucket,
             ((bounds.e - bounds.s) / bounds.n) as width,
             r.ts_unix,
             r.pv_power, r.pv1_voltage, r.pv1_current,
@@ -158,9 +162,16 @@ as $$
     select
         min(b.ts_unix)                                    as bucket_ts,
         count(*)::bigint                                  as samples,
+        -- grid-connected fraction x the time actually covered by this
+        -- bucket's samples (span + one sample interval), so a sparse or
+        -- partial bucket is not credited a full nominal width.
         avg(case when b.grid_voltage >= 50
                  then 1.0::double precision else 0.0::double precision end)
-            * min(b.width)                                as grid_seconds,
+            * (max(b.ts_unix) - min(b.ts_unix))
+            * (case when count(*) > 1
+                    then count(*)::double precision / (count(*) - 1)
+                    else 0 end)                           as grid_seconds,
+        min(b.width)                                      as bucket_width,
         avg(b.pv_power)                                   as pv_power,
         avg(b.pv1_voltage)                                as pv1_voltage,
         avg(b.pv1_current)                                as pv1_current,

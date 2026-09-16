@@ -47,15 +47,15 @@ def _today_energy_fields():
         summary = data_logger.logger.energy_summary(_start_of_today(), now)
     except Exception:
         summary = {}
+    has_data = bool(summary.get("samples"))
+    val = lambda key: (summary.get(key) if has_data else None)
     fields = {
-        "today_solar": _energy_field("Today's Solar Generation",
-                                     summary.get("solar")),
-        "today_consumption": _energy_field("Today's Consumption",
-                                           summary.get("consumption")),
+        "today_solar": _energy_field("Today's Solar Generation", val("solar")),
+        "today_consumption": _energy_field("Today's Consumption", val("consumption")),
         "today_battery_charge": _energy_field("Today's Battery Charged",
-                                              summary.get("battery_charge")),
+                                              val("battery_charge")),
         "today_battery_discharge": _energy_field("Today's Battery Discharged",
-                                                 summary.get("battery_discharge")),
+                                                 val("battery_discharge")),
         # This inverter has no dedicated grid import/export meter.
         "grid_import": _energy_field("Grid Import", None),
         "grid_export": _energy_field("Grid Export", None),
@@ -162,8 +162,14 @@ def create_app():
             "battery_soc", "battery_soh", "house_load", "backup_load",
         ]
 
-        if start is not None and end is not None:
-            rows = data_logger.logger.query_range(start, end, columns=columns)
+        if start is not None or end is not None:
+            # Honour a single bound too, and keep at most `limit` rows
+            # (the most recent ones within the window).
+            lo = start if start is not None else 0.0
+            hi = end if end is not None else 9.9e12
+            rows = data_logger.logger.query_range(
+                lo, hi, columns=columns, limit=limit
+            )
             rows_out = [
                 {"ts": r[1], "ts_unix": r[0],
                  **dict(zip(columns, r[2:]))}

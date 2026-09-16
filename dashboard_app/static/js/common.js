@@ -51,10 +51,11 @@ async function fetchReadings(startUnix, endUnix, limit) {
 // Fetch downsampled history: the server aggregates readings into ~buckets
 // time buckets (one row each) so the full history can be charted in one
 // request. start/end may be null to cover everything from the first record.
-async function fetchHistoryBuckets(startUnix, endUnix, buckets) {
+async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     const params = new URLSearchParams({ buckets: buckets });
     if (startUnix != null) params.set("start", startUnix);
     if (endUnix != null) params.set("end", endUnix);
+    if (onProgress) onProgress(1, 1);   // single local request
     const data = await fetchJSON("/api/history/buckets?" + params.toString());
     const rows = (data && data.rows) || [];
     rows.sort((a, b) => a.ts_unix - b.ts_unix);
