@@ -28,16 +28,16 @@
     </section>
 
     <section class="card">
-        <header class="card-header"><h2>Cloud Connection</h2></header>
+        <header class="card-header"><h2>Modbus Connection</h2></header>
         <div class="info-table">
             <div class="info-row"><span class="info-label">Data Source</span><span id="sys-host">--</span></div>
-            <div class="info-row"><span class="info-label">Sync Method</span><span id="sys-port">--</span></div>
+            <div class="info-row"><span class="info-label">Port</span><span id="sys-port">--</span></div>
             <div class="info-row"><span class="info-label">Slave ID</span><span id="sys-slave">--</span></div>
             <div class="info-row"><span class="info-label">Timeout</span><span id="sys-timeout">--</span></div>
             <div class="info-row"><span class="info-label">Polling Interval</span><span id="sys-poll">--</span></div>
             <div class="info-row"><span class="info-label">Read Errors</span><span id="sys-read-errors">--</span></div>
             <div class="info-row"><span class="info-label">Connection Errors</span><span id="sys-conn-errors">--</span></div>
-            <div class="info-row"><span class="info-label">Total Readings</span><span id="sys-total-reads">--</span></div>
+            <div class="info-row"><span class="info-label">Register Reads (session)</span><span id="sys-total-reads">--</span></div>
         </div>
     </section>
 </div>
@@ -45,7 +45,7 @@
 <section class="panel">
     <header class="panel-header">
         <h2>Latest Readings</h2>
-        <span class="panel-note">From the cloud database (last sync)</span>
+        <span class="panel-note">From live Modbus reads (in-memory)</span>
     </header>
     <div class="table-wrap">
         <table class="diag-table">
@@ -58,11 +58,12 @@
                     <th>Decoded</th>
                     <th>Unit</th>
                     <th>Scale</th>
+                    <th>Confidence</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody id="diag-rows">
-                <tr><td colspan="8" class="table-loading">Loading...</td></tr>
+                <tr><td colspan="9" class="table-loading">Loading...</td></tr>
             </tbody>
         </table>
     </div>

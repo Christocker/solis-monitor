@@ -34,6 +34,10 @@ class ModbusReader:
 
         self._client = None
         self.connected = False
+        # Throttle reconnect attempts (exponential backoff) so an offline
+        # logger cannot cause a connect storm across the register reads.
+        self._next_connect_attempt = 0.0
+        self._connect_backoff = 1.0
 
         # Latest raw snapshot: {key: list_of_register_values | None}
         self._raw = {}
@@ -55,8 +59,15 @@ class ModbusReader:
     # Client management
     # ------------------------------------------------------------------
     def _get_client(self):
-        """Return a connected client, reconnecting if needed."""
+        """Return a connected client, reconnecting if needed.
+
+        Reconnection is throttled with exponential backoff so an offline
+        logger cannot trigger one connect attempt per register read.
+        """
         if self._client is not None and self.connected:
+            return self._client
+        now = time.time()
+        if now < self._next_connect_attempt:
             return self._client
         try:
             if self._client is not None:
@@ -68,12 +79,19 @@ class ModbusReader:
             port=self._config["port"],
             timeout=self._config["timeout"],
         )
-        self.connected = bool(self._client.connect())
-        if not self.connected:
-            with self._lock:
+        try:
+            self.connected = bool(self._client.connect())
+        except Exception:
+            self.connected = False
+        with self._lock:
+            if self.connected:
+                self._connect_backoff = 1.0
+            else:
                 self._stats["connection_errors"] += 1
                 self._stats["last_error_time"] = time.time()
                 self._stats["last_error_message"] = "TCP connection failed"
+                self._next_connect_attempt = now + self._connect_backoff
+                self._connect_backoff = min(self._connect_backoff * 2, 30.0)
         return self._client
 
     def _disconnect(self):
@@ -161,17 +179,29 @@ class ModbusReader:
     # Background thread
     # ------------------------------------------------------------------
     def _poll_loop(self):
-        identification = self.read_identification()
-        with self._lock:
-            self._identification = identification
+        # Never let an unexpected exception kill the poller thread: that
+        # would freeze the snapshot and leave the UI claiming "Connected".
+        try:
+            identification = self.read_identification()
+            with self._lock:
+                self._identification = identification
+        except Exception as exc:
+            with self._lock:
+                self._stats["last_error_time"] = time.time()
+                self._stats["last_error_message"] = f"identification: {exc}"
 
         while not self._stop_event.is_set():
-            raw, errors = self.read_cycle()
-            with self._lock:
-                self._raw = raw
-                self._errors = errors
-                if any(v is not None for v in raw.values()):
-                    self._stats["last_success_time"] = time.time()
+            try:
+                raw, errors = self.read_cycle()
+                with self._lock:
+                    self._raw = raw
+                    self._errors = errors
+                    if any(v is not None for v in raw.values()):
+                        self._stats["last_success_time"] = time.time()
+            except Exception as exc:
+                with self._lock:
+                    self._stats["last_error_time"] = time.time()
+                    self._stats["last_error_message"] = f"poll: {exc}"
             self._stop_event.wait(POLL_INTERVAL)
 
     def start(self):
@@ -210,28 +240,39 @@ def build_demo_snapshot():
     """Return clearly-labeled mock data. NEVER used unless DEMO_MODE=True."""
     import random
 
-    def reg(key, base, jitter=0.0):
-        import time as _t
-        v = base + jitter * (random.random() - 0.5)
-        return [int(v)]
+    def _u16(v):
+        return max(0, min(0xFFFF, int(round(v))))
+
+    def _reg16(base, jitter=0.0, signed=False):
+        v = int(round(base + jitter * (random.random() - 0.5)))
+        if signed and v < 0:
+            v += 0x10000
+        return [_u16(v)]
+
+    def _reg32(base, jitter=0.0, signed=False):
+        v = int(round(base + jitter * (random.random() - 0.5)))
+        if signed and v < 0:
+            v += 1 << 32
+        v &= 0xFFFFFFFF
+        return [(v >> 16) & 0xFFFF, v & 0xFFFF]
 
     raw = {
-        "pv1_voltage": reg("pv1_voltage", 3060, 50),
-        "pv1_current": reg("pv1_current", 28, 4),
-        "pv2_voltage": reg("pv2_voltage", 1300, 30),
-        "pv2_current": reg("pv2_current", 28, 4),
-        "pv_power_total": reg("pv_power_total", 1200, 100),
-        "grid_voltage": reg("grid_voltage", 15, 5),
-        "grid_frequency": reg("grid_frequency", 0, 1),
-        "ac_power": reg("ac_power", 1150, 80),
-        "battery_voltage": reg("battery_voltage", 541, 3),
-        "battery_current": reg("battery_current", 0, 5),
-        "battery_soc": reg("battery_soc", 98, 2),
-        "battery_soh": reg("battery_soh", 100, 1),
-        "bms_voltage": reg("bms_voltage", 5439, 5),
-        "house_load": reg("house_load", 0, 1),
-        "backup_load": reg("backup_load", 1160, 40),
-        "battery_power": reg("battery_power", 0, 10),
+        "pv1_voltage": _reg16(3060, 50),
+        "pv1_current": _reg16(28, 4),
+        "pv2_voltage": _reg16(1300, 30),
+        "pv2_current": _reg16(28, 4),
+        "pv_power_total": _reg32(1200, 100),
+        "grid_voltage": _reg16(2300, 10),
+        "grid_frequency": _reg16(5000, 5),
+        "ac_power": _reg32(1150, 80, signed=True),
+        "battery_voltage": _reg16(541, 3),
+        "battery_current": _reg16(0, 5, signed=True),
+        "battery_soc": _reg16(98, 2),
+        "battery_soh": _reg16(100, 1),
+        "bms_voltage": _reg16(5439, 5),
+        "house_load": _reg16(0, 1),
+        "backup_load": _reg16(1160, 40),
+        "battery_power": _reg32(0, 10, signed=True),
     }
     errors = {k: None for k in raw}
     return raw, errors

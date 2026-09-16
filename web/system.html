@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>System — Solis Monitor</title>
-    <link rel="stylesheet" href="css/style.css?v=20260916i">
+    <link rel="stylesheet" href="css/style.css?v=20260916j">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -98,20 +98,15 @@
                     <div class="info-row"><span class="info-label">Product Model Code</span><span id="sys-product">--</span></div>
                     <div class="info-row"><span class="info-label">Connection</span><span id="sys-connection">--</span></div>
                     <div class="info-row"><span class="info-label">Last Successful Read</span><span id="sys-last-read">--</span></div>
-                    <div class="info-row"><span class="info-label">Last Error</span><span id="sys-last-error">None</span></div>
+                    <div class="info-row"><span class="info-label">Last Error</span><span id="sys-last-error">--</span></div>
                 </div>
             </section>
 
             <section class="card">
-                <header class="card-header"><h2>Cloud Connection</h2></header>
+                <header class="card-header"><h2>Cloud Sync</h2></header>
                 <div class="info-table">
-                    <div class="info-row"><span class="info-label">Data Source</span><span id="sys-host">--</span></div>
-                    <div class="info-row"><span class="info-label">Sync Method</span><span id="sys-port">--</span></div>
-                    <div class="info-row"><span class="info-label">Slave ID</span><span id="sys-slave">--</span></div>
-                    <div class="info-row"><span class="info-label">Timeout</span><span id="sys-timeout">--</span></div>
-                    <div class="info-row"><span class="info-label">Polling Interval</span><span id="sys-poll">--</span></div>
-                    <div class="info-row"><span class="info-label">Read Errors</span><span id="sys-read-errors">--</span></div>
-                    <div class="info-row"><span class="info-label">Connection Errors</span><span id="sys-conn-errors">--</span></div>
+                    <div class="info-row"><span class="info-label">Data Source</span><span>Supabase (cloud)</span></div>
+                    <div class="info-row"><span class="info-label">Transport</span><span>HTTPS (PostgREST)</span></div>
                     <div class="info-row"><span class="info-label">Total Readings</span><span id="sys-total-reads">--</span></div>
                 </div>
             </section>
@@ -127,17 +122,14 @@
                     <thead>
                         <tr>
                             <th>Parameter</th>
-                            <th>Register</th>
-                            <th>Raw (hex)</th>
-                            <th>Raw (dec)</th>
-                            <th>Decoded</th>
+                            <th>Value</th>
                             <th>Unit</th>
                             <th>Scale</th>
                             <th>Status</th>
                         </tr>
                     </thead>
                     <tbody id="diag-rows">
-                        <tr><td colspan="8" class="table-loading">Loading...</td></tr>
+                        <tr><td colspan="5" class="table-loading">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -150,8 +142,8 @@
         <a href="system.html" class="tab-link active"><svg><use href="#i-gear"/></svg><span>System</span></a>
     </nav>
 
-<script src="config.js?v=20260916i"></script>
-<script src="js/common.js?v=20260916i"></script>
-<script src="js/system.js?v=20260916i"></script>
+<script src="config.js?v=20260916j"></script>
+<script src="js/common.js?v=20260916j"></script>
+<script src="js/system.js?v=20260916j"></script>
 </body>
 </html>

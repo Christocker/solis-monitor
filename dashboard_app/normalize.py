@@ -23,6 +23,13 @@ UNVERIFIED = "unverified"     # no verified register exists yet -> show '--'
 UNAVAILABLE = "unavailable"   # known register but no data yet -> show '--'
 ERROR = "error"               # read failed -> show '--' + error indicator
 
+# Inverter model names by the protocol's model code byte (register 35000 low
+# byte). Only names that have actually been seen are listed; anything else
+# is shown as a bare code so the page never claims a model it did not read.
+INVERTER_MODELS = {
+    0x90: "S6-EH1P6K-L-PLUS",
+}
+
 
 def _decode(reg_def, raw_values):
     """Decode raw 16-bit register list into a scaled float/int."""
@@ -63,11 +70,12 @@ def _decode(reg_def, raw_values):
     return round(value * reg_def.get("scale", 1.0), 3)
 
 
-def _field(reg_def, raw_values):
+def _field(reg_def, raw_values, err=None):
     """Build the normalized {value, state, unit, name} for one register."""
     value = _decode(reg_def, raw_values)
     if raw_values is None:
-        state = ERROR
+        # "No data yet" is not a read error; a genuine failure carries an err.
+        state = ERROR if err else UNAVAILABLE
     elif value is None:
         state = UNAVAILABLE
     else:
@@ -118,7 +126,7 @@ def build_snapshot(raw, errors, identification):
     now = time.time()
 
     def field(key):
-        return _field(regmap.REGISTERS_BY_KEY[key], raw.get(key))
+        return _field(regmap.REGISTERS_BY_KEY[key], raw.get(key), errors.get(key))
 
     # ---------------- Solar ----------------
     solar = {
@@ -156,8 +164,10 @@ def build_snapshot(raw, errors, identification):
         "power": _unavailable_field("Grid Power", "W"),
     }
     grid_v = grid["voltage"]["value"]
+    # Tri-state: True = connected, False = disconnected, None = unknown
+    # (no reading yet) — so an unknown grid is never reported as disconnected.
     grid["connected"] = (
-        grid_v is not None and grid_v >= GRID_CONNECTED_THRESHOLD_V
+        None if grid_v is None else (grid_v >= GRID_CONNECTED_THRESHOLD_V)
     )
 
     # ---------------- Load ----------------
@@ -168,7 +178,7 @@ def build_snapshot(raw, errors, identification):
     house_f = field("house_load")
     backup_f = field("backup_load")
     load = {
-        "power": backup_f if not grid["connected"] else house_f,
+        "power": backup_f if grid["connected"] is False else house_f,
         "house_load": house_f,
         "backup_power": backup_f,
     }
@@ -187,8 +197,6 @@ def build_snapshot(raw, errors, identification):
     serial_raw = identification.get("serial_number")
     inv_type_raw = identification.get("inverter_type")
     model_raw = identification.get("product_model")
-    dsp_raw = identification.get("dsp_version")
-    hmi_raw = identification.get("hmi_version")
 
     serial = _decode(
         regmap.REGISTERS_BY_KEY["serial_number"], serial_raw
@@ -201,6 +209,7 @@ def build_snapshot(raw, errors, identification):
     inv_type = inv_type_raw[0] if inv_type_raw else None
     protocol_version = ((inv_type >> 8) & 0xFF) if inv_type is not None else None
     model_code = (inv_type & 0xFF) if inv_type is not None else None
+    model_name = INVERTER_MODELS.get(model_code) if model_code is not None else None
 
     online_fields = list(solar.values()) + list(battery.values()) + [
         grid["voltage"], grid["frequency"], grid["power"]
@@ -211,7 +220,10 @@ def build_snapshot(raw, errors, identification):
         "last_update": _iso_time(now),
         "inverter_model": {
             "name": "Inverter Model",
-            "value": f"S6-EH1P6K-L-PLUS (code {model_code})" if model_code is not None else None,
+            "value": (
+                f"{model_name} (code {model_code})" if model_name
+                else (f"code {model_code}" if model_code is not None else None)
+            ),
             "state": AVAILABLE if model_code is not None else UNAVAILABLE,
         },
         "serial_number": {

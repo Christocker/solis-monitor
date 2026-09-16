@@ -16,12 +16,6 @@ function renderField(field, decimals) {
     return Number(field.value).toFixed(decimals);
 }
 
-async function fetchJSON(url) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    return await res.json();
-}
-
 /* ---------------- Supabase client ---------------- */
 
 function supabaseHeaders() {
@@ -287,6 +281,12 @@ function field(value, unit) {
 function buildSnapshot(row, sysInfo) {
     if (!row) return null;
     const connected = (row.grid_voltage != null) && (row.grid_voltage >= 50);
+    // "Online" means the cloud feed is fresh, not merely that a row exists
+    // (rows are never deleted, so presence alone would always read Online).
+    const STALE_SECONDS = 30;
+    const ageS = (row.ts_unix != null)
+        ? Date.now() / 1000 - Number(row.ts_unix) : Infinity;
+    const fresh = ageS >= 0 && ageS < STALE_SECONDS;
 
     return {
         solar: {
@@ -325,7 +325,7 @@ function buildSnapshot(row, sysInfo) {
             grid_export: field(null, "kWh"),
         },
         system: {
-            online: row.ts_unix != null,
+            online: fresh,
             last_update: row.ts_iso || null,
             inverter_model: field(sysInfo ? sysInfo.inverter_model : null),
             serial_number: field(sysInfo ? sysInfo.serial_number : null),
