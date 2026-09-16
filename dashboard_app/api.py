@@ -10,6 +10,8 @@ This layer never talks to Modbus directly; it consumes Layer 1 raw data
 via Layer 2 normalization.
 """
 
+import time
+
 from flask import jsonify, render_template, request
 
 from .config import DEMO_MODE, SERVER_HOST, SERVER_PORT, POLL_INTERVAL, CONFIG
@@ -17,6 +19,50 @@ from . import modbus_layer
 from . import normalize
 from . import data_logger
 from . import cloud_sync
+
+
+# --- Today's energy totals (integrated from recorded readings) ---
+_ENERGY_CACHE_SECONDS = 20.0
+_energy_cache = {"t": 0.0, "fields": None}
+
+
+def _start_of_today():
+    lt = time.localtime()
+    return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 0, 0, 0, 0, 0, -1))
+
+
+def _energy_field(name, value):
+    if value is None:
+        return {"name": name, "value": None, "state": "unavailable", "unit": "kWh"}
+    return {"name": name, "value": round(value, 3), "state": "available", "unit": "kWh"}
+
+
+def _today_energy_fields():
+    """Today's energy totals, computed from recorded readings (cached ~20s)."""
+    now = time.time()
+    if (_energy_cache["fields"] is not None
+            and now - _energy_cache["t"] < _ENERGY_CACHE_SECONDS):
+        return _energy_cache["fields"]
+    try:
+        summary = data_logger.logger.energy_summary(_start_of_today(), now)
+    except Exception:
+        summary = {}
+    fields = {
+        "today_solar": _energy_field("Today's Solar Generation",
+                                     summary.get("solar")),
+        "today_consumption": _energy_field("Today's Consumption",
+                                           summary.get("consumption")),
+        "today_battery_charge": _energy_field("Today's Battery Charged",
+                                              summary.get("battery_charge")),
+        "today_battery_discharge": _energy_field("Today's Battery Discharged",
+                                                 summary.get("battery_discharge")),
+        # This inverter has no dedicated grid import/export meter.
+        "grid_import": _energy_field("Grid Import", None),
+        "grid_export": _energy_field("Grid Export", None),
+    }
+    _energy_cache["t"] = now
+    _energy_cache["fields"] = fields
+    return fields
 
 
 def _current_snapshot():
@@ -33,7 +79,9 @@ def _current_snapshot():
     else:
         raw, errors = modbus_layer.reader.get_raw_snapshot()
         identification = modbus_layer.reader.get_identification()
-    return normalize.build_snapshot(raw, errors, identification)
+    snapshot = normalize.build_snapshot(raw, errors, identification)
+    snapshot["energy"] = _today_energy_fields()
+    return snapshot
 
 
 def _current_diagnostics():

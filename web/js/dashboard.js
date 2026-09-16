@@ -205,7 +205,6 @@ async function poll() {
         updateBattery(snapshot.battery);
         updateGrid(snapshot.grid);
         updateLoad(snapshot.load, snapshot);
-        updateEnergy(snapshot.energy);
         updateFlow(snapshot);
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);
@@ -219,5 +218,30 @@ async function poll() {
     }
 }
 
+// Today's energy totals are integrated from recorded history (not the live
+// snapshot) and refresh every 60s rather than on every 2s poll.
+function startOfTodayUnix() {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return Math.floor(d.getTime() / 1000);
+}
+
+let energyBusy = false;
+async function refreshEnergy() {
+    if (energyBusy) return;
+    energyBusy = true;
+    try {
+        const now = Math.floor(Date.now() / 1000);
+        const rows = await fetchHistoryBuckets(startOfTodayUnix(), now, 480);
+        updateEnergy(computeEnergy(rows));
+    } catch (err) {
+        console.error("energy refresh failed", err);
+    } finally {
+        energyBusy = false;
+    }
+}
+
 poll();
 setInterval(poll, 2000);
+refreshEnergy();
+setInterval(refreshEnergy, 60000);

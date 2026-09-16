@@ -184,6 +184,55 @@ async function countReadings() {
     return rows.length;
 }
 
+/* ---------------- Energy totals ---------------- */
+
+const ENERGY_GAP_SECONDS = 600;   // skip intervals longer than this (missing data)
+
+// Integrate power buckets into energy (kWh). Returns field objects shaped
+// like snapshot.energy so the dashboard's updateEnergy() can render them.
+function computeEnergy(rows) {
+    const unavailable = () => ({ value: null, state: "unavailable", unit: "kWh" });
+    if (!rows || rows.length < 2) {
+        return {
+            today_solar: unavailable(), today_consumption: unavailable(),
+            today_battery_charge: unavailable(), today_battery_discharge: unavailable(),
+            grid_import: unavailable(), grid_export: unavailable(),
+        };
+    }
+    let solar = 0, consumption = 0, charge = 0, discharge = 0;
+    let prev = null;
+    for (const r of rows) {
+        const load = (r.house_load || 0) + (r.backup_load || 0);
+        if (prev) {
+            const dt = r.ts_unix - prev.ts;
+            if (dt > 0 && dt <= ENERGY_GAP_SECONDS) {
+                if (prev.pv != null && r.pv_power != null)
+                    solar += (prev.pv + r.pv_power) / 2 * dt;
+                if (prev.load != null)
+                    consumption += (prev.load + load) / 2 * dt;
+                if (prev.batt != null && r.battery_power != null) {
+                    const e = (prev.batt + r.battery_power) / 2 * dt;
+                    if (e > 0) discharge += e; else charge += -e;
+                }
+            }
+        }
+        prev = { ts: r.ts_unix, pv: r.pv_power, batt: r.battery_power, load: load };
+    }
+    const kwh = 3.6e6;
+    const field = (v) => ({
+        value: Math.round(v / kwh * 1000) / 1000, state: "available", unit: "kWh",
+    });
+    return {
+        today_solar: field(solar),
+        today_consumption: field(consumption),
+        today_battery_charge: field(charge),
+        today_battery_discharge: field(discharge),
+        // No dedicated grid import/export meter exists on this inverter.
+        grid_import: unavailable(),
+        grid_export: unavailable(),
+    };
+}
+
 /* ---------------- Snapshot builder ---------------- */
 
 function field(value, unit) {

@@ -104,7 +104,10 @@ using the public anon key). No server needed on Vercel.
 
 Pages:
 - **Dashboard** — live cards (Solar, Battery, Grid, Load), energy-flow
-  visualization, energy statistics
+  visualization, and **Energy Statistics**: today's Solar / Consumption /
+  Battery charged / Battery discharged kWh, integrated from the recorded
+  readings (never fabricated). Grid import/export stay unknown — this
+  inverter has no dedicated grid meter.
 - **History** — charts of recorded data with ranges:
   **Seconds / Minutes / Hours / Days / All**. "All" spans everything from
   the first recorded sample to now. Ranges larger than a few hours are

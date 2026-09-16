@@ -190,6 +190,56 @@ class DataLogger:
             conn.close()
         return rows
 
+    def energy_summary(self, start_unix, end_unix, max_gap=300.0):
+        """Integrate power over time to get energy (kWh) for a time range.
+
+        Returns a dict:
+            solar, consumption, battery_charge, battery_discharge  (kWh, floats)
+            samples   : number of raw rows in the range
+        Consumption is house_load + backup_load (the two ports are used in
+        different modes). Intervals longer than `max_gap` seconds are skipped
+        so missing data never fabricates energy.
+        """
+        conn = self._connect()
+        try:
+            cur = conn.execute(
+                "SELECT ts_unix, pv_power, battery_power, house_load, backup_load "
+                "FROM readings WHERE ts_unix >= ? AND ts_unix <= ? "
+                "ORDER BY ts_unix ASC",
+                (start_unix, end_unix),
+            )
+            rows = cur.fetchall()
+        finally:
+            conn.close()
+
+        solar = consumption = charge = discharge = 0.0
+        prev = None
+        for ts, pv, batt, house, backup in rows:
+            load = (house or 0.0) + (backup or 0.0)
+            if prev is not None:
+                dt = ts - prev[0]
+                if 0 < dt <= max_gap:
+                    if prev[1] is not None and pv is not None:
+                        solar += (prev[1] + pv) / 2.0 * dt
+                    if prev[3] is not None:  # load always has a value
+                        consumption += (prev[3] + load) / 2.0 * dt
+                    if prev[2] is not None and batt is not None:
+                        e = (prev[2] + batt) / 2.0 * dt
+                        if e > 0:
+                            discharge += e
+                        else:
+                            charge += -e
+            prev = (ts, pv, batt, load)
+
+        kwh = 3_600_000.0
+        return {
+            "solar": solar / kwh,
+            "consumption": consumption / kwh,
+            "battery_charge": charge / kwh,
+            "battery_discharge": discharge / kwh,
+            "samples": len(rows),
+        }
+
     def query_buckets(self, start_unix=None, end_unix=None, buckets=240):
         """Aggregate readings into `buckets` time buckets, oldest first.
 
