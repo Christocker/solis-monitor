@@ -177,20 +177,29 @@ function initCharts() {
 /* ---------------- View handling ---------------- */
 // Each view sets the time window and the aggregation bucket size.
 let currentView = "minutes";
+// End of the visible window. null = "live" (now); a value pins the window to
+// a past moment so the Seconds/Minutes views can be explored backwards
+// through the whole recording.
+let anchorUnix = null;
 
 const VIEWS = {
-    seconds: { label: "Seconds", window: 600,     points: 120, raw: true },      // 10 min @ 2s
-    minutes: { label: "Minutes", window: 10800,   points: 180, buckets: 360 },   //  3 h
-    hours:   { label: "Hours",   window: 604800,  points: 168, buckets: 336 },   //  7 d
-    days:    { label: "Days",    window: 2592000, points: 120, buckets: 360 },   // 30 d
-    all:     { label: "All",     window: null,    points: 240, buckets: 480 },   // first record -> now
+    seconds: { label: "Seconds", window: 600,     points: 300, raw: true },      // 10 min @ 2s
+    minutes: { label: "Minutes", window: 10800,   points: 360, buckets: 720 },   //  3 h
+    hours:   { label: "Hours",   window: 604800,  points: 336, buckets: 672 },   //  7 d
+    days:    { label: "Days",    window: 2592000, points: 240, buckets: 720 },   // 30 d
+    all:     { label: "All",     window: null,    points: 300, buckets: 600 },   // first record -> now
 };
+
+// End time of the visible window (now when live, else the pinned anchor).
+function windowEnd() {
+    return anchorUnix == null ? Date.now() / 1000 : anchorUnix;
+}
 
 function viewRange(view) {
     const w = VIEWS[view].window;
     if (w == null) return { start: null, end: null };   // full recorded range
-    const now = Date.now() / 1000;
-    return { start: now - w, end: now };
+    const end = windowEnd();
+    return { start: end - w, end: end };
 }
 
 function timeLabel(ts, view) {
@@ -344,6 +353,7 @@ async function loadHistory() {
     const statusEl = document.getElementById("history-status");
     statusEl.textContent = "Loading...";
     const rng = viewRange(viewKey);
+    updateTimeNav(rng);
     const onProgress = view.raw ? null : (done, total) => {
         if (token === loadToken) statusEl.textContent = "Loading " + done + "/" + total + "...";
     };
@@ -376,20 +386,89 @@ function setupViewButtons() {
             document.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
             btn.classList.add("active");
             currentView = btn.dataset.range;
+            updateTimeNav();
             loadHistory();
         });
     });
 }
 
+// ---- Time navigation (explore the past at any resolution) ----
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function toLocalInput(ts) {
+    const d = new Date(ts * 1000);
+    return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate())
+        + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+}
+
+function shiftWindow(dir) {
+    const w = VIEWS[currentView].window;
+    if (w == null) return;                   // "All" has no fixed window
+    const now = Date.now() / 1000;
+    let a = windowEnd() + dir * w;
+    if (a > now) a = now;
+    anchorUnix = a >= now - 1 ? null : a;    // snap back to live at the end
+    updateTimeNav();
+    loadHistory();
+}
+
+function setupTimeNav() {
+    const prev = document.getElementById("nav-prev");
+    const next = document.getElementById("nav-next");
+    const nowBtn = document.getElementById("nav-now");
+    const input = document.getElementById("nav-time");
+    if (prev) prev.addEventListener("click", () => shiftWindow(-1));
+    if (next) next.addEventListener("click", () => shiftWindow(1));
+    if (nowBtn) nowBtn.addEventListener("click", () => {
+        anchorUnix = null; updateTimeNav(); loadHistory();
+    });
+    if (input) input.addEventListener("change", () => {
+        const t = input.value ? Math.floor(new Date(input.value).getTime() / 1000) : null;
+        anchorUnix = (t && t > Date.now() / 1000) ? null : t;
+        updateTimeNav();
+        loadHistory();
+    });
+    updateTimeNav();
+}
+
+function updateTimeNav(rng) {
+    const input = document.getElementById("nav-time");
+    const prev = document.getElementById("nav-prev");
+    const next = document.getElementById("nav-next");
+    const nowBtn = document.getElementById("nav-now");
+    const label = document.getElementById("nav-label");
+    const live = anchorUnix == null;
+    const isAll = VIEWS[currentView].window == null;
+
+    if (input && document.activeElement !== input) {
+        input.value = toLocalInput(live ? Date.now() / 1000 : anchorUnix);
+    }
+    if (prev) prev.disabled = isAll;
+    if (next) next.disabled = isAll || live;
+    if (nowBtn) {
+        nowBtn.classList.toggle("active", live);
+        nowBtn.disabled = isAll;
+    }
+    if (label) {
+        if (isAll) {
+            label.textContent = "All recorded data";
+        } else {
+            const r = rng || viewRange(currentView);
+            const fmt = (ts) => new Date(ts * 1000).toLocaleString();
+            label.textContent = fmt(r.start) + "  →  " + fmt(r.end) + (live ? "  (live)" : "");
+        }
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     initCharts();
     setupViewButtons();
+    setupTimeNav();
     loadHistory();
-    // Auto-refresh only the short, cheap ranges. Larger ranges (hours / days /
-    // all) are aggregated server-side and are loaded on demand when selected,
-    // so a 30s timer does not hammer Supabase.
+    // Auto-refresh only the live, cheap ranges. When pinned to a past window
+    // the data is static, so there is nothing to refresh.
     setInterval(() => {
-        if (currentView === "seconds" || currentView === "minutes") {
+        if (anchorUnix == null && (currentView === "seconds" || currentView === "minutes")) {
             loadHistory();
         }
     }, 30000);

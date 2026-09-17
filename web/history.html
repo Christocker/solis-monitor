@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>History — Solis Monitor</title>
-    <link rel="stylesheet" href="css/style.css?v=20260916k">
+    <link rel="stylesheet" href="css/style.css?v=20260916l">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -96,6 +96,13 @@
                 <button class="range-btn" data-range="days">Days</button>
                 <button class="range-btn" data-range="all">All</button>
             </div>
+            <div class="time-nav">
+                <button id="nav-prev" class="nav-btn" title="Earlier window" aria-label="Earlier window">&lsaquo;</button>
+                <input type="datetime-local" id="nav-time" class="time-input" step="60" aria-label="Window end time">
+                <button id="nav-next" class="nav-btn" title="Later window" aria-label="Later window">&rsaquo;</button>
+                <button id="nav-now" class="nav-btn latest" title="Jump to the latest data">Latest</button>
+            </div>
+            <span id="nav-label" class="nav-label"></span>
         </div>
 
         <div class="stat-grid history-stats">
@@ -185,9 +192,9 @@
         <a href="system.html" class="tab-link"><svg><use href="#i-gear"/></svg><span>System</span></a>
     </nav>
 
-<script src="config.js?v=20260916k"></script>
-<script src="js/common.js?v=20260916k"></script>
-<script src="js/chart.umd.min.js?v=20260916k"></script>
-<script src="js/history.js?v=20260916k"></script>
+<script src="config.js?v=20260916l"></script>
+<script src="js/common.js?v=20260916l"></script>
+<script src="js/chart.umd.min.js?v=20260916l"></script>
+<script src="js/history.js?v=20260916l"></script>
 </body>
 </html>

@@ -21,6 +21,13 @@
         <button class="range-btn" data-range="days">Days</button>
         <button class="range-btn" data-range="all">All</button>
     </div>
+    <div class="time-nav">
+        <button id="nav-prev" class="nav-btn" title="Earlier window" aria-label="Earlier window">&lsaquo;</button>
+        <input type="datetime-local" id="nav-time" class="time-input" step="60" aria-label="Window end time">
+        <button id="nav-next" class="nav-btn" title="Later window" aria-label="Later window">&rsaquo;</button>
+        <button id="nav-now" class="nav-btn latest" title="Jump to the latest data">Latest</button>
+    </div>
+    <span id="nav-label" class="nav-label"></span>
 </div>
 
 <div class="stat-grid history-stats">

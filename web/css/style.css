@@ -911,6 +911,60 @@ body {
 }
 .range-btn:active { opacity: 0.7; }
 
+/* Time navigation — move the window into the past / back to live */
+.time-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.nav-btn {
+    background: var(--surface-muted);
+    border: 1px solid var(--hairline);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s var(--butter), color 0.3s var(--ease);
+}
+@media (hover: hover) and (pointer: fine) {
+    .nav-btn:hover:not(:disabled) {
+        color: var(--text);
+        background: var(--surface-pressed);
+    }
+}
+.nav-btn:disabled { opacity: 0.4; cursor: default; }
+.nav-btn.latest {
+    width: auto;
+    padding: 0 14px;
+    border-radius: var(--radius-pill);
+    font-size: 13px;
+}
+.time-input {
+    font-family: inherit;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-pill);
+    padding: 7px 12px;
+    min-height: 34px;
+}
+.time-input:focus { outline: none; border-color: var(--hairline-strong); }
+.nav-label {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
 /* ============================================================
    Charts
    ============================================================ */
@@ -1030,6 +1084,8 @@ body {
     .range-bar { flex-direction: column; align-items: stretch; }
     .range-buttons { border-radius: var(--radius-md); }
     .range-btn { flex: 1; text-align: center; }
+    .time-nav { flex-wrap: wrap; justify-content: center; }
+    .nav-label { width: 100%; text-align: center; white-space: normal; }
 }
 
 @media (max-width: 380px) {
