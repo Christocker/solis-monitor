@@ -530,6 +530,23 @@ body {
     min-height: 24px;
     letter-spacing: -0.01em;
 }
+/* Battery state of charge, shown under the power value. */
+.flow-node-soc {
+    font-family: var(--font-nums);
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--battery);
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+    letter-spacing: -0.01em;
+}
+.flow-node-soc::after {
+    content: " SOC";
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    opacity: 0.7;
+}
 
 .inverter-node {
     border: 2px solid rgba(0, 113, 227, 0.35);
@@ -995,6 +1012,7 @@ body {
     .flow-arrow-col { height: 32px; width: 26px; }
     .flow-arrow-side { min-width: 16px; }
     .flow-node-value { font-size: 11px; }
+    .flow-node-soc { font-size: 11px; }
 }
 
 @media (max-width: 640px) {

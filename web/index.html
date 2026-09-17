@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Dashboard — Solis Monitor</title>
-    <link rel="stylesheet" href="css/style.css?v=20260916j">
+    <link rel="stylesheet" href="css/style.css?v=20260916k">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -219,11 +219,12 @@
                 </div>
                 <div class="flow-row flow-hub-row">
                     <div class="flow-side">
-                        <div class="flow-node" id="flow-battery">
-                            <div class="flow-node-icon"><svg><use href="#i-battery"/></svg></div>
-                            <div class="flow-node-name">BATTERY</div>
-                            <div class="flow-node-value" id="flow-batt-w">-- W</div>
-                        </div>
+                    <div class="flow-node" id="flow-battery">
+                        <div class="flow-node-icon"><svg><use href="#i-battery"/></svg></div>
+                        <div class="flow-node-name">BATTERY</div>
+                        <div class="flow-node-value" id="flow-batt-w">-- W</div>
+                        <div class="flow-node-soc" id="flow-batt-soc">--</div>
+                    </div>
                         <div class="flow-arrow-side" id="flow-batt-inv">
                             <div class="flow-arrow right">
                                 <span class="link-line"></span>
@@ -295,8 +296,8 @@
         <a href="system.html" class="tab-link"><svg><use href="#i-gear"/></svg><span>System</span></a>
     </nav>
 
-<script src="config.js?v=20260916j"></script>
-<script src="js/common.js?v=20260916j"></script>
-<script src="js/dashboard.js?v=20260916j"></script>
+<script src="config.js?v=20260916k"></script>
+<script src="js/common.js?v=20260916k"></script>
+<script src="js/dashboard.js?v=20260916k"></script>
 </body>
 </html>

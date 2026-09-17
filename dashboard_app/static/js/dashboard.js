@@ -148,6 +148,8 @@ function updateFlow(snapshot) {
     setValue("flow-batt-w", battPower === null ? "--"
         : (Math.round(Math.abs(battPower)) === 0 ? "0 W"
            : (battPower > 0 ? "out " : "in ") + Math.abs(battPower).toFixed(0) + " W"));
+    const battSoc = b.soc && b.soc.state === "available" ? Number(b.soc.value) : null;
+    setValue("flow-batt-soc", battSoc === null ? "--" : battSoc.toFixed(0) + "%");
     // Grid node value: show connection state; power only when we have it.
     if (gridConnected === false) {
         setValue("flow-grid-w", "DISCONNECTED");
