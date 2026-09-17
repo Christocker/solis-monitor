@@ -7,6 +7,10 @@ let lastValues = {};   // track previous values to flash on change
 
 function flash(el) {
     if (!el) return;
+    // Throttle: 2 s polling makes 2-dp values jitter, so don't strobe.
+    const now = Date.now();
+    if (el._lastFlash && now - el._lastFlash < 1200) return;
+    el._lastFlash = now;
     el.classList.remove("value-flash");
     // Force reflow so the class re-triggers the transition
     void el.offsetWidth;
@@ -59,6 +63,10 @@ function updateStatusBanner(snapshot) {
         gridPill.innerHTML = '<span class="dot dot-waiting"></span> GRID --';
         if (gridStatusText) gridStatusText.textContent = "Grid --";
     }
+
+    // DEMO badge (topbar)
+    const badge = document.getElementById("demo-badge");
+    if (badge) badge.style.display = snapshot.demo ? "inline-block" : "none";
 }
 
 function updateSolar(s) {
@@ -77,15 +85,24 @@ function updateBattery(b) {
     setValue("batt-current", renderField(b.current, 2));
     setValue("batt-power", renderField(b.power, 0));
 
-    // SOC ring
-    const soc = b.soc && b.soc.state === "available" ? Number(b.soc.value) : 0;
+    // SOC ring — radius read from the SVG so it can never drift; unknown SOC
+    // is left neutral instead of looking critically empty.
+    const socOk = b.soc && b.soc.state === "available" && b.soc.value != null;
+    const soc = socOk ? Number(b.soc.value) : 0;
     const fill = document.getElementById("soc-ring-fill");
     if (fill) {
-        const r = 38;
+        const r = Number(fill.getAttribute("r")) || 41;
         const circ = 2 * Math.PI * r;
         fill.style.strokeDasharray = circ.toFixed(2);
         fill.style.strokeDashoffset = (circ * (1 - Math.max(0, Math.min(100, soc)) / 100)).toFixed(2);
-        fill.style.stroke = soc >= 50 ? "var(--battery)" : (soc >= 20 ? "var(--warning)" : "var(--danger)");
+        fill.style.stroke = !socOk ? "var(--text-tertiary)"
+            : (soc >= 50 ? "var(--battery)"
+               : (soc >= 20 ? "var(--warning)" : "var(--danger)"));
+    }
+    const dot = document.getElementById("soc-dot");
+    if (dot) {
+        dot.className = "dot " + (!socOk ? "dot-waiting"
+            : soc >= 50 ? "dot-ok" : (soc >= 20 ? "dot-warn" : "dot-error"));
     }
 }
 
@@ -111,8 +128,10 @@ function updateLoad(l, snapshot) {
         const gridConn = snapshot && snapshot.grid && snapshot.grid.connected;
         if (gridConn === false) {
             source.textContent = "Load Power (Backup port)";
-        } else {
+        } else if (gridConn === true) {
             source.textContent = "Load Power (Grid port)";
+        } else {
+            source.textContent = "Load Power";
         }
     }
 }
@@ -199,7 +218,7 @@ function updateFlow(snapshot) {
 
 // Draw one connector.
 //   direction : fixed axis + flow direction ("up" | "down" | "left" | "right")
-//   power     : null = unknown (hidden), 0 = idle (plain line),
+//   power     : null = unknown (faint line), 0 = idle (plain line),
 //               > 0 = flowing (animated dashes + comet + arrowhead)
 //   mode      : "offline" = faint dashed line (grid disconnected)
 function setLink(id, direction, power, colorClass, mode) {
@@ -211,7 +230,7 @@ function setLink(id, direction, power, colorClass, mode) {
     if (mode === "offline") {
         link.classList.add("offline");
     } else if (power === null) {
-        link.classList.add("hidden");
+        link.classList.add("line");          // unknown: keep the topology visible
     } else if (power > 0) {
         link.classList.add("active", colorClass);
     } else {
@@ -224,7 +243,10 @@ function set(id, text) {
     if (el) el.textContent = text;
 }
 
+let pollBusy = false;
 async function poll() {
+    if (pollBusy) return;                    // don't stack requests
+    pollBusy = true;
     try {
         const snapshot = await fetchJSON("/api/status");
         lastGood = snapshot;
@@ -238,13 +260,25 @@ async function poll() {
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);
     } catch (err) {
-        // Network/server error — show offline but keep last good values.
+        // Network/server error — show offline and clear the grid state too,
+        // so a stale "GRID CONNECTED" is never shown next to CONNECTION LOST.
         updateGlobalStatus(null);
         const pill = document.querySelector("#status-banner .status-pill");
         if (pill) {
             pill.className = "status-pill pill-error";
             pill.innerHTML = '<span class="dot dot-error"></span> CONNECTION LOST';
         }
+        const gridPill = document.getElementById("grid-status-pill");
+        if (gridPill) {
+            gridPill.className = "status-pill pill-muted";
+            gridPill.innerHTML = '<span class="dot dot-waiting"></span> GRID --';
+        }
+        const gst = document.getElementById("grid-status-text");
+        if (gst) gst.textContent = "Grid --";
+        const gconn = document.getElementById("grid-connection");
+        if (gconn) gconn.textContent = NORMAL_DASH;
+    } finally {
+        pollBusy = false;
     }
 }
 

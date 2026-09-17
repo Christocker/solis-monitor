@@ -83,13 +83,21 @@ class DataLogger:
 
     # ------------------------------------------------------------------
     def _connect(self):
-        conn = sqlite3.connect(self.db_path)
-        conn.executescript(SCHEMA.format(columns=cols_schema()))
-        conn.commit()
+        # Schema is created once in _init_db(); don't re-run DDL on every
+        # 2-second insert. WAL keeps reads from blocking the writer.
+        conn = sqlite3.connect(self.db_path, timeout=5.0)
+        conn.execute("PRAGMA busy_timeout = 5000")
         return conn
 
     def _init_db(self):
-        self._connect().close()
+        conn = sqlite3.connect(self.db_path, timeout=5.0)
+        try:
+            conn.executescript(SCHEMA.format(columns=cols_schema()))
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA synchronous = NORMAL")
+            conn.commit()
+        finally:
+            conn.close()
 
     def _insert(self, conn, row):
         conn.execute(self._insert_sql, row)
@@ -105,13 +113,15 @@ class DataLogger:
         ts_iso = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
 
         row = [now, ts_iso]
-
-        # Map each field from the snapshot.
         for snap_key, _col in FIELDS:
-            # snap_key is a top-level snapshot category field name
+            # snap_key is a top-level snapshot field name
             # e.g. pv1_voltage lives under snapshot["solar"]
-            value = _extract(snapshot, snap_key)
-            row.append(value)
+            row.append(_extract(snapshot, snap_key))
+
+        # Inverter offline -> every field is NULL. Don't fill the database
+        # (or the history charts) with useless rows.
+        if all(v is None for v in row[2:]):
+            return
 
         conn = self._connect()
         try:
@@ -221,6 +231,7 @@ class DataLogger:
 
         solar = consumption = charge = discharge = 0.0
         prev = None
+        intervals = 0
         for ts, pv, batt, house, backup in rows:
             load = None
             if house is not None or backup is not None:
@@ -228,16 +239,22 @@ class DataLogger:
             if prev is not None:
                 dt = ts - prev[0]
                 if 0 < dt <= max_gap:
+                    used = False
                     if prev[1] is not None and pv is not None:
                         solar += (prev[1] + pv) / 2.0 * dt
+                        used = True
                     if prev[2] is not None and batt is not None:
                         e = (prev[2] + batt) / 2.0 * dt
                         if e > 0:
                             discharge += e
                         else:
                             charge += -e
+                        used = True
                     if prev[3] is not None and load is not None:
                         consumption += (prev[3] + load) / 2.0 * dt
+                        used = True
+                    if used:
+                        intervals += 1
             prev = (ts, pv, batt, load)
 
         kwh = 3_600_000.0
@@ -247,6 +264,7 @@ class DataLogger:
             "battery_charge": charge / kwh,
             "battery_discharge": discharge / kwh,
             "samples": len(rows),
+            "intervals": intervals,
         }
 
     def query_buckets(self, start_unix=None, end_unix=None, buckets=240):

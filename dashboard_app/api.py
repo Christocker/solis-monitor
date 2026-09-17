@@ -10,9 +10,11 @@ This layer never talks to Modbus directly; it consumes Layer 1 raw data
 via Layer 2 normalization.
 """
 
+import math
 import time
 
 from flask import jsonify, render_template, request
+from werkzeug.exceptions import HTTPException
 
 from .config import DEMO_MODE, SERVER_HOST, SERVER_PORT, POLL_INTERVAL, CONFIG
 from . import modbus_layer
@@ -47,7 +49,7 @@ def _today_energy_fields():
         summary = data_logger.logger.energy_summary(_start_of_today(), now)
     except Exception:
         summary = {}
-    has_data = bool(summary.get("samples"))
+    has_data = bool(summary.get("intervals"))
     val = lambda key: (summary.get(key) if has_data else None)
     fields = {
         "today_solar": _energy_field("Today's Solar Generation", val("solar")),
@@ -76,10 +78,42 @@ def _current_snapshot():
             "dsp_version": [21],
             "hmi_version": [41],
         }
+        stats = {}
     else:
         raw, errors = modbus_layer.reader.get_raw_snapshot()
         identification = modbus_layer.reader.get_identification()
+        stats = modbus_layer.reader.get_stats()
+
     snapshot = normalize.build_snapshot(raw, errors, identification)
+
+    # Honesty: report the data's own timestamp and derive "online" from
+    # freshness, so a dead poller cannot keep claiming SYSTEM ONLINE.
+    now = time.time()
+    last = stats.get("last_success_time")
+    stale_after = max(3 * POLL_INTERVAL, 10.0)
+    age = (now - last) if last is not None else None
+    fresh = age is not None and age <= stale_after
+    data_ts = last if last is not None else now
+
+    system = snapshot.get("system", {})
+    system["online"] = bool(fresh and system.get("online"))
+    system["stale"] = (age is None) or (age > stale_after)
+    system["age_seconds"] = round(age, 1) if age is not None else None
+    iso = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data_ts))
+    system["last_update"] = iso
+    snapshot["system"] = system
+    snapshot["timestamp"] = iso
+
+    snapshot["stats"] = {
+        "last_success_time": last,
+        "last_error_time": stats.get("last_error_time"),
+        "last_error_message": stats.get("last_error_message"),
+        "read_errors": stats.get("read_errors", 0),
+        "connection_errors": stats.get("connection_errors", 0),
+        "total_reads": stats.get("total_reads", 0),
+        "stale": system["stale"],
+        "age_seconds": system["age_seconds"],
+    }
     snapshot["energy"] = _today_energy_fields()
     return snapshot
 
@@ -106,6 +140,14 @@ def create_app():
     from flask import Flask
     app = Flask(__name__)
     app.config["DEMO_MODE"] = DEMO_MODE
+
+    @app.errorhandler(Exception)
+    def _handle_error(e):
+        """Always answer API/browser errors as JSON, never a bare HTML 500."""
+        if isinstance(e, HTTPException):
+            return jsonify({"error": e.name}), (e.code or 500)
+        app.logger.exception("unhandled error")
+        return jsonify({"error": str(e)}), 500
 
     @app.route("/")
     def dashboard():
@@ -154,6 +196,12 @@ def create_app():
         limit = max(1, min(limit, 10000))
         start = request.args.get("start", default=None, type=float)
         end = request.args.get("end", default=None, type=float)
+        if start is not None and not math.isfinite(start):
+            return jsonify({"error": "start must be a finite number"}), 400
+        if end is not None and not math.isfinite(end):
+            return jsonify({"error": "end must be a finite number"}), 400
+        if start is not None and end is not None and start > end:
+            return jsonify({"error": "start must be <= end"}), 400
 
         columns = [
             "pv1_voltage", "pv1_current", "pv2_voltage", "pv2_current",
@@ -225,6 +273,12 @@ def create_app():
         buckets = max(1, min(buckets, 2000))
         start = request.args.get("start", default=None, type=float)
         end = request.args.get("end", default=None, type=float)
+        if start is not None and not math.isfinite(start):
+            return jsonify({"error": "start must be a finite number"}), 400
+        if end is not None and not math.isfinite(end):
+            return jsonify({"error": "end must be a finite number"}), 400
+        if start is not None and end is not None and start > end:
+            return jsonify({"error": "start must be <= end"}), 400
         rows = data_logger.logger.query_buckets(start, end, buckets)
         return jsonify({"count": len(rows), "rows": rows})
 

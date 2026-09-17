@@ -31,8 +31,8 @@
 
     /* Text (Apple grays) */
     --text: #1d1d1f;
-    --text-secondary: #6e6e73;
-    --text-tertiary: #86868b;
+    --text-secondary: #58585c;
+    --text-tertiary: #6e6e73;
     --text-on-accent: #ffffff;
 
     /* Accents (Apple system colors) */
@@ -206,6 +206,18 @@ body {
     color: var(--text-tertiary);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+}
+
+.demo-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 3px 8px;
+    border-radius: var(--radius-pill);
+    background: rgba(255, 149, 0, 0.15);
+    color: #9a5a00;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
 }
 
 /* ============================================================
@@ -535,7 +547,7 @@ body {
     font-family: var(--font-nums);
     font-size: 13px;
     font-weight: 650;
-    color: var(--battery);
+    color: #1f9d45;
     font-variant-numeric: tabular-nums;
     margin-top: 2px;
     letter-spacing: -0.01em;
@@ -1105,12 +1117,19 @@ body {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
-    /* Keep the energy-flow connectors animating — they are the core
-       visualization and must clearly show the direction of flow. */
-    .flow-arrow.active .link-line,
-    .flow-arrow.active .link-comet,
+    /* Respect reduced motion: show flow direction with a solid coloured line
+       and a static arrowhead instead of a moving comet and marching dashes. */
+    .flow-arrow.active .link-line {
+        animation: none !important;
+        background: currentColor !important;
+        opacity: 0.9 !important;
+    }
+    .flow-arrow.active .link-comet {
+        animation: none !important;
+        display: none !important;
+    }
     .flow-arrow.active .link-head {
-        animation-duration: 1.25s !important;
-        animation-iteration-count: infinite !important;
+        animation: none !important;
+        opacity: 1 !important;
     }
 }

@@ -83,13 +83,13 @@
             </a>
             <nav class="site-nav">
                 <a href="/" class="nav-link {% block nav_dashboard %}{% endblock %}">
-                    <svg><use href="#i-home"/></svg><span>Dashboard</span>
+                    <svg aria-hidden="true" focusable="false"><use href="#i-home"/></svg><span>Dashboard</span>
                 </a>
                 <a href="/history" class="nav-link {% block nav_history %}{% endblock %}">
-                    <svg><use href="#i-chart"/></svg><span>History</span>
+                    <svg aria-hidden="true" focusable="false"><use href="#i-chart"/></svg><span>History</span>
                 </a>
                 <a href="/system" class="nav-link {% block nav_system %}{% endblock %}">
-                    <svg><use href="#i-gear"/></svg><span>System</span>
+                    <svg aria-hidden="true" focusable="false"><use href="#i-gear"/></svg><span>System</span>
                 </a>
             </nav>
             <div class="topbar-right">
@@ -103,9 +103,9 @@
     </main>
 
     <nav class="tab-bar">
-        <a href="/" class="tab-link {% block tab_dashboard %}{% endblock %}"><svg><use href="#i-home"/></svg><span>Dashboard</span></a>
-        <a href="/history" class="tab-link {% block tab_history %}{% endblock %}"><svg><use href="#i-chart"/></svg><span>History</span></a>
-        <a href="/system" class="tab-link {% block tab_system %}{% endblock %}"><svg><use href="#i-gear"/></svg><span>System</span></a>
+        <a href="/" class="tab-link {% block tab_dashboard %}{% endblock %}" aria-label="Dashboard"><svg aria-hidden="true" focusable="false"><use href="#i-home"/></svg><span>Dashboard</span></a>
+        <a href="/history" class="tab-link {% block tab_history %}{% endblock %}" aria-label="History"><svg aria-hidden="true" focusable="false"><use href="#i-chart"/></svg><span>History</span></a>
+        <a href="/system" class="tab-link {% block tab_system %}{% endblock %}" aria-label="System"><svg aria-hidden="true" focusable="false"><use href="#i-gear"/></svg><span>System</span></a>
     </nav>
 
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>

@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Dashboard — Solis Monitor</title>
-    <link rel="stylesheet" href="css/style.css?v=20260916l">
+    <link rel="stylesheet" href="css/style.css?v=20260916n">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -78,17 +78,17 @@
             </a>
             <nav class="site-nav">
                 <a href="index.html" class="nav-link active">
-                    <svg><use href="#i-home"/></svg><span>Dashboard</span>
+                    <svg aria-hidden="true" focusable="false"><use href="#i-home"/></svg><span>Dashboard</span>
                 </a>
                 <a href="history.html" class="nav-link">
-                    <svg><use href="#i-chart"/></svg><span>History</span>
+                    <svg aria-hidden="true" focusable="false"><use href="#i-chart"/></svg><span>History</span>
                 </a>
                 <a href="system.html" class="nav-link">
-                    <svg><use href="#i-gear"/></svg><span>System</span>
+                    <svg aria-hidden="true" focusable="false"><use href="#i-gear"/></svg><span>System</span>
                 </a>
             </nav>
             <div class="topbar-right">
-                <span id="last-update" class="last-update">Last update: --</span>
+                <span id="last-update" class="last-update" role="status" aria-live="polite">Last update: --</span>
             </div>
         </div>
     </div>
@@ -99,7 +99,7 @@
             <p class="subtitle">Live energy overview</p>
         </header>
 
-        <div id="status-banner" class="status-banner">
+        <div id="status-banner" class="status-banner" role="status" aria-live="polite">
             <span class="status-pill pill-waiting">
                 <span class="dot"></span> SYSTEM STATUS PENDING
             </span>
@@ -112,7 +112,7 @@
             <section class="card" data-accent="solar">
                 <header class="card-header">
                     <h2>Solar</h2>
-                    <span class="card-icon sun-icon"><svg><use href="#i-sun"/></svg></span>
+                    <span class="card-icon sun-icon"><svg aria-hidden="true" focusable="false"><use href="#i-sun"/></svg></span>
                 </header>
                 <div class="card-main">
                     <div class="big-value">
@@ -132,7 +132,7 @@
             <section class="card" data-accent="battery">
                 <header class="card-header">
                     <h2>Battery</h2>
-                    <span class="card-icon batt-icon"><svg><use href="#i-battery"/></svg></span>
+                    <span class="card-icon batt-icon"><svg aria-hidden="true" focusable="false"><use href="#i-battery"/></svg></span>
                 </header>
                 <div class="soc-wrap">
                     <div class="soc-ring" id="soc-ring">
@@ -144,7 +144,7 @@
                         <span class="soc-ring-label" id="batt-soc">--</span>
                     </div>
                     <div class="soc-meta">
-                        <div class="soc-meta-row"><span class="dot dot-ok"></span> State of Charge</div>
+                        <div class="soc-meta-row"><span class="dot dot-waiting" id="soc-dot"></span> State of Charge</div>
                         <div class="soc-meta-row"><span>Voltage</span> <b id="batt-voltage-meta">--</b> V</div>
                     </div>
                 </div>
@@ -159,7 +159,7 @@
             <section class="card" data-accent="grid">
                 <header class="card-header">
                     <h2>Grid</h2>
-                    <span class="card-icon grid-icon"><svg><use href="#i-grid"/></svg></span>
+                    <span class="card-icon grid-icon"><svg aria-hidden="true" focusable="false"><use href="#i-grid"/></svg></span>
                 </header>
                 <div class="card-main">
                     <div class="big-value">
@@ -178,7 +178,7 @@
             <section class="card" data-accent="load">
                 <header class="card-header">
                     <h2>Load</h2>
-                    <span class="card-icon load-icon"><svg><use href="#i-zap"/></svg></span>
+                    <span class="card-icon load-icon"><svg aria-hidden="true" focusable="false"><use href="#i-zap"/></svg></span>
                 </header>
                 <div class="card-main">
                     <div class="big-value">
@@ -203,7 +203,7 @@
             <div class="flow">
                 <div class="flow-row">
                     <div class="flow-node" id="flow-solar">
-                        <div class="flow-node-icon"><svg><use href="#i-sun"/></svg></div>
+                        <div class="flow-node-icon"><svg aria-hidden="true" focusable="false"><use href="#i-sun"/></svg></div>
                         <div class="flow-node-name">SOLAR</div>
                         <div class="flow-node-value" id="flow-solar-w">-- W</div>
                     </div>
@@ -220,7 +220,7 @@
                 <div class="flow-row flow-hub-row">
                     <div class="flow-side">
                     <div class="flow-node" id="flow-battery">
-                        <div class="flow-node-icon"><svg><use href="#i-battery"/></svg></div>
+                        <div class="flow-node-icon"><svg aria-hidden="true" focusable="false"><use href="#i-battery"/></svg></div>
                         <div class="flow-node-name">BATTERY</div>
                         <div class="flow-node-value" id="flow-batt-w">-- W</div>
                         <div class="flow-node-soc" id="flow-batt-soc">--</div>
@@ -234,7 +234,7 @@
                         </div>
                     </div>
                     <div class="flow-node inverter-node" id="flow-inverter">
-                        <div class="flow-node-icon"><svg><use href="#i-box"/></svg></div>
+                        <div class="flow-node-icon"><svg aria-hidden="true" focusable="false"><use href="#i-box"/></svg></div>
                         <div class="flow-node-name">INVERTER</div>
                         <div class="flow-node-sub">solar hub</div>
                         <div class="flow-node-value" id="flow-inv-w"></div>
@@ -248,7 +248,7 @@
                             </div>
                         </div>
                         <div class="flow-node" id="flow-load">
-                            <div class="flow-node-icon"><svg><use href="#i-zap"/></svg></div>
+                            <div class="flow-node-icon"><svg aria-hidden="true" focusable="false"><use href="#i-zap"/></svg></div>
                             <div class="flow-node-name">LOAD</div>
                             <div class="flow-node-value" id="flow-load-w">-- W</div>
                         </div>
@@ -265,7 +265,7 @@
                 </div>
                 <div class="flow-row">
                     <div class="flow-node" id="flow-grid">
-                        <div class="flow-node-icon"><svg><use href="#i-grid"/></svg></div>
+                        <div class="flow-node-icon"><svg aria-hidden="true" focusable="false"><use href="#i-grid"/></svg></div>
                         <div class="flow-node-name">GRID</div>
                         <div class="flow-node-value" id="flow-grid-w">-- W</div>
                     </div>
@@ -291,13 +291,13 @@
     </main>
 
     <nav class="tab-bar">
-        <a href="index.html" class="tab-link active"><svg><use href="#i-home"/></svg><span>Dashboard</span></a>
-        <a href="history.html" class="tab-link"><svg><use href="#i-chart"/></svg><span>History</span></a>
-        <a href="system.html" class="tab-link"><svg><use href="#i-gear"/></svg><span>System</span></a>
+        <a href="index.html" class="tab-link active" aria-label="Dashboard"><svg aria-hidden="true" focusable="false"><use href="#i-home"/></svg><span>Dashboard</span></a>
+        <a href="history.html" class="tab-link" aria-label="History"><svg aria-hidden="true" focusable="false"><use href="#i-chart"/></svg><span>History</span></a>
+        <a href="system.html" class="tab-link" aria-label="System"><svg aria-hidden="true" focusable="false"><use href="#i-gear"/></svg><span>System</span></a>
     </nav>
 
-<script src="config.js?v=20260916l"></script>
-<script src="js/common.js?v=20260916l"></script>
-<script src="js/dashboard.js?v=20260916l"></script>
+<script src="config.js?v=20260916n"></script>
+<script src="js/common.js?v=20260916n"></script>
+<script src="js/dashboard.js?v=20260916n"></script>
 </body>
 </html>

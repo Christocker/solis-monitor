@@ -90,6 +90,29 @@ const HISTORY_CONCURRENCY = 2;
 const HISTORY_MAX_CALLS = 200;
 let _rpcCalls = 0;
 
+// Cache merged bucket results for a window so revisiting a past window (or
+// re-opening "All") is instant instead of re-running the whole chunked scan.
+const HISTORY_CACHE_TTL_MS = 2 * 60 * 1000;
+function _histCacheKey(s, e, buckets) {
+    return "hist:" + Math.round(s) + ":" + Math.round(e) + ":" + buckets;
+}
+function _histCacheGet(key) {
+    try {
+        const raw = sessionStorage.getItem(key);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (Date.now() - obj.t > HISTORY_CACHE_TTL_MS) {
+            sessionStorage.removeItem(key);
+            return null;
+        }
+        return obj.rows;
+    } catch (e) { return null; }
+}
+function _histCacheSet(key, rows) {
+    try { sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), rows })); }
+    catch (e) { /* quota/unavailable: caching is optional */ }
+}
+
 async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     _rpcCalls = 0;
     let s = startUnix, e = endUnix;
@@ -101,9 +124,24 @@ async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     }
     if (!(e > s)) return await historyBucketsCall(s, e, buckets);
 
+    // Cache under a stable key. For "All" (no explicit bounds) the resolved
+    // max grows every second, so key it as "all" instead of by bounds.
+    const cacheKey = (startUnix == null && endUnix == null)
+        ? "hist:all:" + buckets
+        : _histCacheKey(s, e, buckets);
+    const cached = _histCacheGet(cacheKey);
+    if (cached) {
+        if (onProgress) onProgress(1, 1);
+        return cached;
+    }
+
     const span = e - s;
     const n = Math.max(1, Math.ceil(span / HISTORY_CHUNK_SECONDS));
-    if (n === 1) return await historyBucketsCall(s, e, buckets);
+    if (n === 1) {
+        const rows = await historyBucketsCall(s, e, buckets);
+        _histCacheSet(cacheKey, rows);
+        return rows;
+    }
 
     const jobs = [];
     const base = Math.floor(buckets / n);
@@ -119,6 +157,7 @@ async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     const results = await runLimited(jobs, HISTORY_CONCURRENCY, onProgress);
     const rows = [].concat(...results);
     rows.sort((a, b) => a.ts_unix - b.ts_unix);
+    _histCacheSet(cacheKey, rows);
     return rows;
 }
 
@@ -280,7 +319,7 @@ function field(value, unit) {
 // from a Supabase reading row.
 function buildSnapshot(row, sysInfo) {
     if (!row) return null;
-    const connected = (row.grid_voltage != null) && (row.grid_voltage >= 50);
+    const connected = row.grid_voltage == null ? null : (row.grid_voltage >= 50);
     // "Online" means the cloud feed is fresh, not merely that a row exists
     // (rows are never deleted, so presence alone would always read Online).
     const STALE_SECONDS = 30;
@@ -310,9 +349,10 @@ function buildSnapshot(row, sysInfo) {
             connected: connected,
         },
         load: {
+            // Match the local backend: pick the port that is actually in use
+            // (backup when off-grid, grid port otherwise).
             power: field(
-                (row.house_load != null && row.house_load > 0)
-                    ? row.house_load : row.backup_load, "W"),
+                connected === false ? row.backup_load : row.house_load, "W"),
             house_load: field(row.house_load, "W"),
             backup_power: field(row.backup_load, "W"),
         },

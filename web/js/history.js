@@ -322,6 +322,19 @@ function setText(id, text) {
     if (el) el.textContent = text;
 }
 
+// Clear all charts and statistics (used when a range has no data, so stale
+// values cannot be mistaken for the selected window).
+function clearCharts() {
+    for (const def of CHART_DEFS) {
+        const chart = charts[def.id];
+        if (!chart) continue;
+        chart.data.labels = [];
+        chart.data.datasets = [];
+        chart.update();
+    }
+    for (const def of STAT_DEFS) setText(def.id, NORMAL_DASH);
+}
+
 function renderCharts(rows, view) {
     const points = VIEWS[view].points;
 
@@ -363,6 +376,7 @@ async function loadHistory() {
             : await fetchHistoryBuckets(rng.start, rng.end, view.buckets, onProgress);
         if (token !== loadToken) return;  // superseded by a newer request
         if (!rows || rows.length === 0) {
+            clearCharts();
             statusEl.textContent = "No recorded data in this range yet.";
             return;
         }
