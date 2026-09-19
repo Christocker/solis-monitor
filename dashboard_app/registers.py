@@ -235,6 +235,21 @@ SENSOR_REGISTERS = [
         "display": True,
     },
     {
+        # The inverter reports battery current/power as MAGNITUDES (always
+        # >= 0); the flow direction lives in this register.
+        "key": "battery_direction",
+        "name": "Battery Direction",
+        "address": 33135,
+        "count": 1,
+        "function": 4,
+        "data_type": "u16",
+        "scale": 1.0,
+        "unit": "",
+        "state": VERIFIED,
+        "source": "LCD cross-check; 0 = charging, 1 = discharging",
+        "display": False,
+    },
+    {
         "key": "battery_soc",
         "name": "Battery SOC",
         "address": 33139,

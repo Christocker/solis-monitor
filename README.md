@@ -267,6 +267,7 @@ Cross-validated against the inverter LCD on 2026-08-11.
 | 33094 | Grid Frequency | U16 | x0.01 Hz |
 | 33133 | Battery Voltage | U16 | x0.1 V |
 | 33134 | Battery Current | S16 | x0.1 A |
+| 33135 | Battery Direction | U16 | 0=charge, 1=discharge |
 | 33139 | Battery SOC | U16 | x1 % |
 | 33140 | Battery SOH | U16 | x1 % |
 | 33141 | BMS Voltage | U16 | x0.01 V |
