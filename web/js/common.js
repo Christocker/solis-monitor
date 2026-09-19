@@ -259,7 +259,25 @@ async function countReadings() {
 
 /* ---------------- Energy totals ---------------- */
 
-const ENERGY_GAP_SECONDS = 600;   // skip intervals longer than this (missing data)
+const ENERGY_GAP_SECONDS = 600;   // fallback gap cap for raw rows
+
+// Largest interval we trust when integrating. Bucketed rows carry the
+// server's bucket width; otherwise estimate from the series spacing. This
+// keeps lifetime integration (coarse buckets) working while still skipping
+// real data gaps.
+function energyMaxGap(rows) {
+    if (rows.length && rows[0].bucket_width != null) {
+        return rows[0].bucket_width * 1.5;
+    }
+    if (rows.length > 1) {
+        const dts = [];
+        for (let i = 1; i < rows.length; i++) dts.push(rows[i].ts_unix - rows[i - 1].ts_unix);
+        dts.sort((a, b) => a - b);
+        const median = dts[Math.floor(dts.length / 2)];
+        return Math.max(1, median) * 1.5;
+    }
+    return ENERGY_GAP_SECONDS;
+}
 
 // Integrate power buckets into energy (kWh). Returns field objects shaped
 // like snapshot.energy so the dashboard's updateEnergy() can render them.
@@ -272,13 +290,14 @@ function computeEnergy(rows) {
             grid_import: unavailable(), grid_export: unavailable(),
         };
     }
+    const maxGap = energyMaxGap(rows);
     let solar = 0, consumption = 0, charge = 0, discharge = 0;
     let prev = null;
     for (const r of rows) {
         const load = (r.house_load || 0) + (r.backup_load || 0);
         if (prev) {
             const dt = r.ts_unix - prev.ts;
-            if (dt > 0 && dt <= ENERGY_GAP_SECONDS) {
+            if (dt > 0 && dt <= maxGap) {
                 if (prev.pv != null && r.pv_power != null)
                     solar += (prev.pv + r.pv_power) / 2 * dt;
                 if (prev.load != null)

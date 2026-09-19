@@ -124,6 +124,47 @@ function updateEnergy(e) {
     setValue("stat-grid-export", renderField(e.grid_export, 1));
 }
 
+function updateLifetime(e) {
+    setValue("stat-life-solar", renderField(e.lifetime_solar, 1));
+    setValue("stat-life-consumption", renderField(e.lifetime_consumption, 1));
+    setValue("stat-life-batt-charge", renderField(e.lifetime_battery_charge, 1));
+    setValue("stat-life-batt-discharge", renderField(e.lifetime_battery_discharge, 1));
+    renderCo2(e.co2_avoided);
+    if (e.first_record) {
+        const d = new Date(e.first_record * 1000).toLocaleDateString();
+        set("stat-life-since", d);
+        set("life-since", "since " + d);
+    } else {
+        set("stat-life-since", NORMAL_DASH);
+        set("life-since", "");
+    }
+}
+
+function renderCo2(co2) {
+    const valEl = document.getElementById("stat-co2");
+    if (!valEl) return;
+    const unitEl = document.getElementById("stat-co2-unit");
+    const subEl = document.getElementById("stat-co2-sub");
+    if (co2 && co2.state === "available" && co2.value != null) {
+        let v = Number(co2.value), unit = co2.unit || "kg";
+        if (v >= 1000) { v = v / 1000; unit = "t"; }
+        valEl.textContent = v.toFixed(unit === "t" ? 2 : 1);
+        if (unitEl) unitEl.textContent = unit;
+        if (subEl) subEl.textContent = (co2.trees != null)
+            ? "\u2248 " + Number(co2.trees).toFixed(co2.trees >= 10 ? 0 : 1) + " trees/yr"
+            : "";
+    } else {
+        valEl.textContent = NORMAL_DASH;
+        if (unitEl) unitEl.textContent = "kg";
+        if (subEl) subEl.textContent = "";
+    }
+}
+
+function set(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
 function updateFlow(snapshot) {
     const s = snapshot.solar, b = snapshot.battery,
           g = snapshot.grid, l = snapshot.load;
@@ -280,7 +321,68 @@ async function refreshEnergy() {
     }
 }
 
+// ---- Lifetime totals + CO2 avoided ----
+// CO2 factors match the backend defaults (dashboard_app/config.py).
+const CO2_KG_PER_KWH = 0.7;
+const CO2_KG_PER_TREE_YEAR = 21.0;
+const LIFETIME_CACHE_KEY = "lifetimeEnergy:v1";
+const LIFETIME_TTL_MS = 6 * 60 * 60 * 1000;
+
+function co2Field(solarKwh) {
+    if (solarKwh == null) {
+        return { value: null, state: "unavailable", unit: "kg", trees: null };
+    }
+    const co2 = solarKwh * CO2_KG_PER_KWH;
+    return {
+        value: Math.round(co2 * 10) / 10,
+        state: "available",
+        unit: "kg",
+        trees: Math.round(co2 / CO2_KG_PER_TREE_YEAR * 10) / 10,
+    };
+}
+
+function lifetimeFromBuckets(rows) {
+    const e = computeEnergy(rows);
+    const solar = e.today_solar && e.today_solar.state === "available"
+        ? Number(e.today_solar.value) : null;
+    return {
+        lifetime_solar: e.today_solar,
+        lifetime_consumption: e.today_consumption,
+        lifetime_battery_charge: e.today_battery_charge,
+        lifetime_battery_discharge: e.today_battery_discharge,
+        co2_avoided: co2Field(solar),
+        first_record: rows.length ? rows[0].ts_unix : null,
+    };
+}
+
+let lifetimeBusy = false;
+async function refreshLifetime() {
+    if (lifetimeBusy) return;
+    try {
+        const raw = localStorage.getItem(LIFETIME_CACHE_KEY);
+        if (raw) {
+            const o = JSON.parse(raw);
+            if (Date.now() - o.t < LIFETIME_TTL_MS) { updateLifetime(o.lifetime); return; }
+        }
+    } catch (e) { /* ignore */ }
+    lifetimeBusy = true;
+    try {
+        const rows = await fetchHistoryBuckets(null, null, 600);
+        const lifetime = lifetimeFromBuckets(rows);
+        try {
+            localStorage.setItem(LIFETIME_CACHE_KEY, JSON.stringify({ t: Date.now(), lifetime }));
+        } catch (e) { /* ignore */ }
+        updateLifetime(lifetime);
+    } catch (err) {
+        console.error("lifetime refresh failed", err);
+    } finally {
+        lifetimeBusy = false;
+    }
+}
+
 poll();
 setInterval(poll, 2000);
 refreshEnergy();
 setInterval(refreshEnergy, 60000);
+refreshLifetime();
+setInterval(refreshLifetime, 30 * 60 * 1000);

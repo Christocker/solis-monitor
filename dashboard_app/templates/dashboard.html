@@ -192,15 +192,79 @@
 <section class="panel">
     <header class="panel-header">
         <h2>Energy Statistics</h2>
-        <span class="panel-note">Today's totals, integrated from recorded readings</span>
+        <span class="panel-note">Integrated from recorded readings</span>
     </header>
+
+    <div class="stat-group"><span class="stat-group-label">Today</span></div>
     <div class="stat-grid">
-        <div class="stat"><span class="stat-label">Today's Solar</span><div><span class="stat-value" id="stat-today-solar">--</span> <span class="stat-unit">kWh</span></div></div>
-        <div class="stat"><span class="stat-label">Today's Consumption</span><div><span class="stat-value" id="stat-today-consumption">--</span> <span class="stat-unit">kWh</span></div></div>
-        <div class="stat"><span class="stat-label">Battery Charged Today</span><div><span class="stat-value" id="stat-today-batt-charge">--</span> <span class="stat-unit">kWh</span></div></div>
-        <div class="stat"><span class="stat-label">Battery Discharged Today</span><div><span class="stat-value" id="stat-today-batt-discharge">--</span> <span class="stat-unit">kWh</span></div></div>
-        <div class="stat"><span class="stat-label">Grid Import</span><div><span class="stat-value" id="stat-grid-import">--</span> <span class="stat-unit">kWh</span></div></div>
-        <div class="stat"><span class="stat-label">Grid Export</span><div><span class="stat-value" id="stat-grid-export">--</span> <span class="stat-unit">kWh</span></div></div>
+        <div class="stat stat-solar">
+            <span class="stat-icon"><svg><use href="#i-sun"/></svg></span>
+            <span class="stat-label">Solar Generated</span>
+            <div><span class="stat-value" id="stat-today-solar">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-load">
+            <span class="stat-icon"><svg><use href="#i-zap"/></svg></span>
+            <span class="stat-label">Consumption</span>
+            <div><span class="stat-value" id="stat-today-consumption">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-battery">
+            <span class="stat-icon"><svg><use href="#i-battery"/></svg></span>
+            <span class="stat-label">Battery Charged</span>
+            <div><span class="stat-value" id="stat-today-batt-charge">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-battery">
+            <span class="stat-icon"><svg><use href="#i-battery"/></svg></span>
+            <span class="stat-label">Battery Discharged</span>
+            <div><span class="stat-value" id="stat-today-batt-discharge">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-gride">
+            <span class="stat-icon"><svg><use href="#i-grid"/></svg></span>
+            <span class="stat-label">Grid Import</span>
+            <div><span class="stat-value" id="stat-grid-import">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-gride">
+            <span class="stat-icon"><svg><use href="#i-grid"/></svg></span>
+            <span class="stat-label">Grid Export</span>
+            <div><span class="stat-value" id="stat-grid-export">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+    </div>
+
+    <div class="stat-group">
+        <span class="stat-group-label">Lifetime</span>
+        <span class="stat-group-note" id="life-since"></span>
+    </div>
+    <div class="stat-grid">
+        <div class="stat stat-solar">
+            <span class="stat-icon"><svg><use href="#i-sun"/></svg></span>
+            <span class="stat-label">Solar Generated</span>
+            <div><span class="stat-value" id="stat-life-solar">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-load">
+            <span class="stat-icon"><svg><use href="#i-zap"/></svg></span>
+            <span class="stat-label">Consumption</span>
+            <div><span class="stat-value" id="stat-life-consumption">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-battery">
+            <span class="stat-icon"><svg><use href="#i-battery"/></svg></span>
+            <span class="stat-label">Battery Charged</span>
+            <div><span class="stat-value" id="stat-life-batt-charge">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-battery">
+            <span class="stat-icon"><svg><use href="#i-battery"/></svg></span>
+            <span class="stat-label">Battery Discharged</span>
+            <div><span class="stat-value" id="stat-life-batt-discharge">--</span> <span class="stat-unit">kWh</span></div>
+        </div>
+        <div class="stat stat-co2">
+            <span class="stat-icon"><svg><use href="#i-leaf"/></svg></span>
+            <span class="stat-label">CO₂ Avoided</span>
+            <div><span class="stat-value" id="stat-co2">--</span> <span class="stat-unit" id="stat-co2-unit">kg</span></div>
+            <span class="stat-sub" id="stat-co2-sub"></span>
+        </div>
+        <div class="stat stat-neutral">
+            <span class="stat-icon"><svg><use href="#i-clock"/></svg></span>
+            <span class="stat-label">Recording Since</span>
+            <div><span class="stat-value" id="stat-life-since">--</span></div>
+        </div>
     </div>
 </section>
 {% endblock %}

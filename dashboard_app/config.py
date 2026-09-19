@@ -37,6 +37,13 @@ DISCOVERY_INTERVAL = float(os.environ.get("SOLIS_DISCOVERY_INTERVAL", "300"))  #
 # Grid is considered connected when grid voltage is above this threshold (V)
 GRID_CONNECTED_THRESHOLD_V = 50.0
 
+# Grid CO2 intensity used for the "CO2 avoided" estimate (kg CO2e per kWh).
+# Default ~0.7 (typical grid); override with CO2_KG_PER_KWH.
+CO2_KG_PER_KWH = float(os.environ.get("CO2_KG_PER_KWH", "0.7"))
+
+# A mature tree absorbs roughly this many kg CO2 per year (for the equivalent).
+CO2_KG_PER_TREE_YEAR = 21.0
+
 # Web server
 SERVER_HOST = "0.0.0.0"     # all interfaces so other devices on the LAN can connect
 SERVER_PORT = 8080

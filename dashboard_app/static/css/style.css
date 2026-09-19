@@ -811,6 +811,45 @@ body {
 }
 .stat-unit { font-size: 12px; color: var(--text-tertiary); margin-left: 2px; }
 
+/* Per-tile icon, group labels and the highlighted CO2 tile */
+.stat-icon {
+    width: 26px; height: 26px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 9px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    color: var(--text-secondary);
+}
+.stat-icon svg { width: 15px; height: 15px; }
+.stat-solar .stat-icon { color: var(--solar); background: rgba(255, 149, 0, 0.10); border-color: transparent; }
+.stat-load .stat-icon { color: var(--load); background: rgba(175, 82, 222, 0.10); border-color: transparent; }
+.stat-battery .stat-icon { color: var(--battery); background: rgba(52, 199, 89, 0.12); border-color: transparent; }
+.stat-gride .stat-icon { color: var(--grid); background: rgba(0, 113, 227, 0.10); border-color: transparent; }
+.stat-co2 .stat-icon { color: #1f9d45; background: rgba(31, 157, 69, 0.14); border-color: transparent; }
+.stat-co2 {
+    border-color: rgba(31, 157, 69, 0.30);
+    background: linear-gradient(180deg, rgba(31, 157, 69, 0.07), rgba(31, 157, 69, 0));
+}
+.stat-co2 .stat-value { color: #1f9d45; }
+.stat-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 3px; }
+.stat-group {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 10px; margin: 2px 0 10px;
+}
+.stat-group + .stat-grid + .stat-group { margin-top: 22px; }
+.stat-group-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.07em;
+    text-transform: uppercase; color: var(--text-tertiary);
+}
+.stat-group-note {
+    font-size: 12px; color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+}
+@media (max-width: 640px) {
+    .stat-icon { width: 24px; height: 24px; margin-bottom: 7px; }
+}
+
 /* ============================================================
    Info tables
    ============================================================ */

@@ -137,12 +137,49 @@ function updateLoad(l, snapshot) {
 }
 
 function updateEnergy(e) {
+    // Today
     setValue("stat-today-solar", renderField(e.today_solar, 1));
     setValue("stat-today-consumption", renderField(e.today_consumption, 1));
     setValue("stat-today-batt-charge", renderField(e.today_battery_charge, 1));
     setValue("stat-today-batt-discharge", renderField(e.today_battery_discharge, 1));
     setValue("stat-grid-import", renderField(e.grid_import, 1));
     setValue("stat-grid-export", renderField(e.grid_export, 1));
+}
+
+function updateLifetime(e) {
+    setValue("stat-life-solar", renderField(e.lifetime_solar, 1));
+    setValue("stat-life-consumption", renderField(e.lifetime_consumption, 1));
+    setValue("stat-life-batt-charge", renderField(e.lifetime_battery_charge, 1));
+    setValue("stat-life-batt-discharge", renderField(e.lifetime_battery_discharge, 1));
+    renderCo2(e.co2_avoided);
+    if (e.first_record) {
+        const d = new Date(e.first_record * 1000).toLocaleDateString();
+        set("stat-life-since", d);
+        set("life-since", "since " + d);
+    } else {
+        set("stat-life-since", NORMAL_DASH);
+        set("life-since", "");
+    }
+}
+
+function renderCo2(co2) {
+    const valEl = document.getElementById("stat-co2");
+    if (!valEl) return;
+    const unitEl = document.getElementById("stat-co2-unit");
+    const subEl = document.getElementById("stat-co2-sub");
+    if (co2 && co2.state === "available" && co2.value != null) {
+        let v = Number(co2.value), unit = co2.unit || "kg";
+        if (v >= 1000) { v = v / 1000; unit = "t"; }
+        valEl.textContent = v.toFixed(unit === "t" ? 2 : 1);
+        if (unitEl) unitEl.textContent = unit;
+        if (subEl) subEl.textContent = (co2.trees != null)
+            ? "\u2248 " + Number(co2.trees).toFixed(co2.trees >= 10 ? 0 : 1) + " trees/yr"
+            : "";
+    } else {
+        valEl.textContent = NORMAL_DASH;
+        if (unitEl) unitEl.textContent = "kg";
+        if (subEl) subEl.textContent = "";
+    }
 }
 
 function updateFlow(snapshot) {
@@ -256,6 +293,7 @@ async function poll() {
         updateGrid(snapshot.grid);
         updateLoad(snapshot.load, snapshot);
         updateEnergy(snapshot.energy);
+        updateLifetime(snapshot.energy);
         updateFlow(snapshot);
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);

@@ -16,7 +16,10 @@ import time
 from flask import jsonify, render_template, request
 from werkzeug.exceptions import HTTPException
 
-from .config import DEMO_MODE, SERVER_HOST, SERVER_PORT, POLL_INTERVAL, CONFIG
+from .config import (
+    DEMO_MODE, SERVER_HOST, SERVER_PORT, POLL_INTERVAL, CONFIG,
+    CO2_KG_PER_KWH, CO2_KG_PER_TREE_YEAR,
+)
 from . import modbus_layer
 from . import normalize
 from . import data_logger
@@ -67,6 +70,56 @@ def _today_energy_fields():
     return fields
 
 
+# --- Lifetime totals (whole recorded history) ---
+_LIFETIME_CACHE_SECONDS = 300.0
+_lifetime_cache = {"t": 0.0, "fields": None}
+
+
+def _co2_field(name, kwh):
+    """CO2 avoided estimate (kg) from generated kWh, plus a tree-year equivalent."""
+    if kwh is None:
+        return {"name": name, "value": None, "state": "unavailable",
+                "unit": "kg", "trees": None}
+    co2 = kwh * CO2_KG_PER_KWH
+    return {
+        "name": name,
+        "value": round(co2, 1),
+        "state": "available",
+        "unit": "kg",
+        "trees": round(co2 / CO2_KG_PER_TREE_YEAR, 1),
+    }
+
+
+def _lifetime_energy_fields():
+    """Lifetime energy totals, integrated from every recorded reading (cached)."""
+    now = time.time()
+    if (_lifetime_cache["fields"] is not None
+            and now - _lifetime_cache["t"] < _LIFETIME_CACHE_SECONDS):
+        return _lifetime_cache["fields"]
+    first, _last = data_logger.logger.min_max_time()
+    summary = {}
+    if first is not None:
+        try:
+            summary = data_logger.logger.energy_summary(first, now)
+        except Exception:
+            summary = {}
+    has = bool(summary.get("intervals"))
+    val = lambda key: (summary.get(key) if has else None)
+    fields = {
+        "lifetime_solar": _energy_field("Lifetime Solar Generation", val("solar")),
+        "lifetime_consumption": _energy_field("Lifetime Consumption", val("consumption")),
+        "lifetime_battery_charge": _energy_field("Lifetime Battery Charged",
+                                                 val("battery_charge")),
+        "lifetime_battery_discharge": _energy_field("Lifetime Battery Discharged",
+                                                    val("battery_discharge")),
+        "co2_avoided": _co2_field("CO2 Avoided", val("solar")),
+        "first_record": first,
+    }
+    _lifetime_cache["t"] = now
+    _lifetime_cache["fields"] = fields
+    return fields
+
+
 def _current_snapshot():
     """Return the latest normalized snapshot."""
     if DEMO_MODE:
@@ -114,7 +167,9 @@ def _current_snapshot():
         "stale": system["stale"],
         "age_seconds": system["age_seconds"],
     }
-    snapshot["energy"] = _today_energy_fields()
+    energy = _today_energy_fields()
+    energy.update(_lifetime_energy_fields())
+    snapshot["energy"] = energy
     return snapshot
 
 

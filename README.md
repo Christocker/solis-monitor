@@ -120,10 +120,12 @@ using the public anon key). No server needed on Vercel.
 
 Pages:
 - **Dashboard** — live cards (Solar, Battery, Grid, Load), energy-flow
-  visualization, and **Energy Statistics**: today's Solar / Consumption /
-  Battery charged / Battery discharged kWh, integrated from the recorded
-  readings (never fabricated). Grid import/export stay unknown — this
-  inverter has no dedicated grid meter.
+  visualization, and **Energy Statistics**: **today's** and **lifetime**
+  Solar / Consumption / Battery charged / Battery discharged (kWh),
+  integrated from the recorded readings (never fabricated), plus an
+  estimated **CO₂ avoided** (`CO2_KG_PER_KWH`, default 0.7 kg/kWh, shown with
+  a tree-year equivalent). Grid import/export stay unknown — this inverter
+  has no dedicated grid meter.
 - **History** — charts of recorded data with ranges:
   **Seconds / Minutes / Hours / Days / All**. "All" spans everything from
   the first recorded sample to now. Ranges larger than a few hours are
