@@ -355,7 +355,18 @@ function lifetimeFromBuckets(rows) {
     };
 }
 
+function updateLifetimeLoading() {
+    const ids = ["stat-life-solar", "stat-life-consumption",
+                 "stat-life-batt-charge", "stat-life-batt-discharge",
+                 "stat-life-since", "stat-co2"];
+    for (const id of ids) {
+        const el = document.getElementById(id);
+        if (el && (el.textContent === "--" || el.textContent === "")) el.textContent = "\u2026";
+    }
+}
+
 let lifetimeBusy = false;
+let lifetimeRetry = null;
 async function refreshLifetime() {
     if (lifetimeBusy) return;
     try {
@@ -366,6 +377,7 @@ async function refreshLifetime() {
         }
     } catch (e) { /* ignore */ }
     lifetimeBusy = true;
+    updateLifetimeLoading();
     try {
         const rows = await fetchHistoryBuckets(null, null, 600);
         const lifetime = lifetimeFromBuckets(rows);
@@ -375,6 +387,9 @@ async function refreshLifetime() {
         updateLifetime(lifetime);
     } catch (err) {
         console.error("lifetime refresh failed", err);
+        // Retry sooner than the 30-minute period after a failure.
+        if (lifetimeRetry) clearTimeout(lifetimeRetry);
+        lifetimeRetry = setTimeout(refreshLifetime, 60000);
     } finally {
         lifetimeBusy = false;
     }

@@ -115,8 +115,11 @@ def _lifetime_energy_fields():
         "co2_avoided": _co2_field("CO2 Avoided", val("solar")),
         "first_record": first,
     }
-    _lifetime_cache["t"] = now
-    _lifetime_cache["fields"] = fields
+    # Only cache a successful computation; a transient failure must retry on
+    # the next request instead of showing "—" for the whole TTL.
+    if has:
+        _lifetime_cache["t"] = now
+        _lifetime_cache["fields"] = fields
     return fields
 
 
