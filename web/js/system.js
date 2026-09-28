@@ -117,6 +117,24 @@ async function loadSystem() {
     }
 }
 
+// Cloud-sync heartbeat (laptop alive?) — refreshed every 30 s.
+let syncBusy = false;
+async function refreshSync() {
+    if (syncBusy) return;
+    syncBusy = true;
+    try {
+        const sync = await fetchSyncStatus();
+        if (sync && sync.last_sync_unix) {
+            set("sys-last-upload", ageText(Date.now() / 1000 - sync.last_sync_unix));
+            set("sys-laptop", sync.laptop_host || NORMAL_DASH);
+        } else {
+            set("sys-last-upload", NORMAL_DASH);
+            set("sys-laptop", NORMAL_DASH);
+        }
+    } catch (e) { /* ignore */ }
+    finally { syncBusy = false; }
+}
+
 // Exact row count is an expensive full-table aggregate; refresh it slowly.
 let countBusy = false;
 async function refreshTotalReadings() {
@@ -136,6 +154,8 @@ async function refreshTotalReadings() {
 document.addEventListener("DOMContentLoaded", () => {
     loadSystem();
     refreshTotalReadings();
+    refreshSync();
     setInterval(() => { if (!document.hidden) loadSystem(); }, 2000);
     setInterval(refreshTotalReadings, 60000);
+    setInterval(refreshSync, 30000);
 });

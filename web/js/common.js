@@ -63,6 +63,17 @@ if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
     });
 }
 
+// Cloud-sync heartbeat row (written by the laptop). Null if unavailable.
+async function fetchSyncStatus() {
+    try {
+        const url = SUPABASE_URL + "/rest/v1/sync_status?id=eq.1&select=*&limit=1";
+        const res = await supabaseFetch(url, { headers: supabaseHeaders() });
+        if (!res.ok) return null;
+        const rows = await res.json();
+        return rows[0] || null;
+    } catch (e) { return null; }
+}
+
 // Fetch system info row (serial, model).
 async function fetchSystemInfo() {
     const url = SUPABASE_URL + "/rest/v1/system_info" +
@@ -257,7 +268,7 @@ async function fetchReadingsBounds() {
 async function countReadings() {
     const url = SUPABASE_URL + "/rest/v1/readings?select=id&limit=1";
     const res = await supabaseFetch(url, {
-        headers: { ...supabaseHeaders(), "Prefer": "count=exact", "Range": "0-0" },
+        headers: { ...supabaseHeaders(), "Prefer": "count=estimated", "Range": "0-0" },
     });
     if (!res.ok) throw new Error("Supabase HTTP " + res.status);
     const range = res.headers.get("content-range");
@@ -540,3 +551,10 @@ function setupTheme() {
 }
 
 document.addEventListener("DOMContentLoaded", setupTheme);
+
+/* Mark the active nav/tab link for assistive tech. */
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".nav-link.active, .tab-link.active").forEach((a) => {
+        a.setAttribute("aria-current", "page");
+    });
+});

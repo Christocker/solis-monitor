@@ -259,6 +259,16 @@ async function getSystemInfo() {
     return _sysInfo === undefined ? null : _sysInfo;
 }
 
+let _syncStatus = null;
+let _syncFetched = 0;
+async function getSyncStatus() {
+    if (_syncStatus && Date.now() - _syncFetched < 60000) return _syncStatus;
+    const s = await fetchSyncStatus();
+    if (s) _syncStatus = s;
+    _syncFetched = Date.now();
+    return _syncStatus;
+}
+
 let pollBusy = false;
 let anyError = false;
 async function poll() {
@@ -280,6 +290,22 @@ async function poll() {
         updateFlow(snapshot);
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);
+
+        // Distinguish "laptop/cloud sync dead" from "inverter offline".
+        const sync = await getSyncStatus();
+        if (!snapshot.system.online && sync && sync.last_sync_unix) {
+            const syncAge = Date.now() / 1000 - sync.last_sync_unix;
+            const pill = document.querySelector("#status-banner .status-pill");
+            if (pill) {
+                if (syncAge > 180) {
+                    pill.className = "status-pill pill-error";
+                    pill.innerHTML = '<span class="dot dot-error"></span> LAPTOP OFFLINE \u2014 LAST UPLOAD ' + ageText(syncAge).toUpperCase();
+                } else {
+                    pill.className = "status-pill pill-warn";
+                    pill.innerHTML = '<span class="dot dot-warn"></span> INVERTER OFFLINE';
+                }
+            }
+        }
     } catch (err) {
         anyError = true;
         updateGlobalStatus(null);

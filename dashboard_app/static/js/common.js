@@ -165,3 +165,10 @@ function setupTheme() {
 }
 
 document.addEventListener("DOMContentLoaded", setupTheme);
+
+/* Mark the active nav/tab link for assistive tech. */
+document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll(".nav-link.active, .tab-link.active").forEach((a) => {
+        a.setAttribute("aria-current", "page");
+    });
+});

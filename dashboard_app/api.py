@@ -172,6 +172,7 @@ def _current_snapshot():
         "total_reads": stats.get("total_reads", 0),
         "stale": system["stale"],
         "age_seconds": system["age_seconds"],
+        "cloud": cloud_sync.syncer.get_status(),
     }
     energy = _today_energy_fields()
     energy.update(_lifetime_energy_fields())

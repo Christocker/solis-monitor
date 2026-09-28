@@ -16,6 +16,7 @@ The sync itself is STRICTLY READ-ONLY toward the inverter.
 
 import json
 import os
+import socket
 import threading
 import time
 
@@ -133,6 +134,27 @@ def sync_system_info(snapshot, url, key):
     return resp
 
 
+def supabase_upsert(table, rows, url, key, on_conflict=None):
+    """Insert or update rows (PostgREST upsert)."""
+    headers = {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates,return=minimal",
+    }
+    endpoint = f"{url}/rest/v1/{table}"
+    if on_conflict:
+        endpoint += f"?on_conflict={on_conflict}"
+    resp = requests.post(endpoint, headers=headers, data=json.dumps(rows), timeout=10)
+    resp.raise_for_status()
+    return resp
+
+
+# How often to write the heartbeat / daily-energy rollups (seconds).
+HEARTBEAT_INTERVAL = 60.0
+ENERGY_INTERVAL = 300.0
+
+
 class CloudSyncer:
     """Background thread that pushes the shared reader's snapshot to Supabase."""
 
@@ -142,6 +164,12 @@ class CloudSyncer:
         self._stop_event = threading.Event()
         self._thread = None
         self._url, self._key = get_credentials()
+        # Health / heartbeat state
+        self._last_ok = None
+        self._errors = 0
+        self._last_error = None
+        self._last_heartbeat = 0.0
+        self._last_energy = 0.0
 
     @property
     def configured(self):
@@ -158,6 +186,68 @@ class CloudSyncer:
             target=self._loop, daemon=True, name="cloud-sync"
         )
         self._thread.start()
+
+    def get_status(self):
+        """Health snapshot for the local API / UI."""
+        now = time.time()
+        return {
+            "configured": self.configured,
+            "last_sync_unix": self._last_ok,
+            "age_seconds": round(now - self._last_ok, 1) if self._last_ok else None,
+            "error_count": self._errors,
+            "last_error": self._last_error,
+        }
+
+    def _maybe_heartbeat(self):
+        now = time.time()
+        if now - self._last_heartbeat < HEARTBEAT_INTERVAL:
+            return
+        self._last_heartbeat = now
+        try:
+            supabase_upsert("sync_status", [{
+                "id": 1,
+                "laptop_host": socket.gethostname(),
+                "last_sync_unix": self._last_ok,
+                "last_sync_iso": time.strftime(
+                    "%Y-%m-%d %H:%M:%S",
+                    time.localtime(self._last_ok or now)),
+                "last_error": self._last_error,
+                "error_count": self._errors,
+            }], self._url, self._key, on_conflict="id")
+        except requests.RequestException:
+            pass          # heartbeat is best-effort
+
+    def _maybe_energy(self):
+        now = time.time()
+        if now - self._last_energy < ENERGY_INTERVAL:
+            return
+        self._last_energy = now
+        try:
+            from . import data_logger
+            rows = []
+            for offset in (0, 1):
+                lt = time.localtime(now - offset * 86400)
+                start = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday,
+                                     0, 0, 0, 0, 0, -1))
+                end = now if offset == 0 else start + 86400
+                summ = data_logger.logger.energy_summary(start, end)
+                if not summ.get("intervals"):
+                    continue
+                rows.append({
+                    "day": time.strftime("%Y-%m-%d", time.localtime(start)),
+                    "solar_kwh": round(summ["solar"], 3),
+                    "consumption_kwh": round(summ["consumption"], 3),
+                    "battery_charge_kwh": round(summ["battery_charge"], 3),
+                    "battery_discharge_kwh": round(summ["battery_discharge"], 3),
+                    "grid_import_kwh": round(summ["grid_import"], 3),
+                    "grid_export_kwh": round(summ["grid_export"], 3),
+                    "samples": summ["samples"],
+                })
+            if rows:
+                supabase_upsert("daily_energy", rows, self._url, self._key,
+                                on_conflict="day")
+        except Exception as exc:
+            self._last_error = str(exc)
 
     def stop(self):
         self._stop_event.set()
@@ -186,14 +276,21 @@ class CloudSyncer:
                 )
 
                 supabase_post("readings", [row], self._url, self._key)
-                print(f"  [{row['ts_iso']}] pv={row['pv_power']} "
-                      f"soc={row['battery_soc']} grid={row['grid_voltage']} "
-                      f"load={row['house_load'] or row['backup_load']}")
+                self._last_ok = row["ts_unix"]
+                self._errors = 0
+                self._last_error = None
 
             except requests.RequestException as exc:
+                self._errors += 1
+                self._last_error = str(exc)
                 print(f"  ! cloud sync upload failed: {exc}")
             except Exception as exc:
+                self._errors += 1
+                self._last_error = str(exc)
                 print(f"  ! cloud sync error: {type(exc).__name__}: {exc}")
+
+            self._maybe_heartbeat()
+            self._maybe_energy()
 
             # Sleep only the remainder of the interval so the upload
             # cadence stays exactly SYNC_INTERVAL (not interval + upload time).

@@ -209,3 +209,59 @@ alter function public.history_buckets(double precision, double precision, intege
 -- immediately from the website.
 notify pgrst, 'reload schema';
 
+
+-- ============================================================
+-- Sync heartbeat + daily energy rollups
+-- ============================================================
+-- Written by the laptop (service_role), read by the website (anon).
+
+-- Single-row heartbeat: lets the site tell "inverter offline" from
+-- "laptop/cloud sync dead".
+create table if not exists public.sync_status (
+    id integer primary key,
+    laptop_host text,
+    last_sync_unix double precision,
+    last_sync_iso text,
+    last_error text,
+    error_count integer default 0,
+    updated_at timestamp with time zone default now()
+);
+
+-- One row per day: powers fast period summaries and long-range charts.
+create table if not exists public.daily_energy (
+    day date primary key,
+    solar_kwh double precision,
+    consumption_kwh double precision,
+    battery_charge_kwh double precision,
+    battery_discharge_kwh double precision,
+    grid_import_kwh double precision,
+    grid_export_kwh double precision,
+    samples bigint,
+    updated_at timestamp with time zone default now()
+);
+
+alter table public.sync_status  enable row level security;
+alter table public.daily_energy enable row level security;
+
+drop policy if exists "sync_status public read" on public.sync_status;
+create policy "sync_status public read"
+    on public.sync_status for select using (true);
+drop policy if exists "sync_status service write" on public.sync_status;
+create policy "sync_status service write"
+    on public.sync_status for all using (true) with check (true);
+
+drop policy if exists "daily_energy public read" on public.daily_energy;
+create policy "daily_energy public read"
+    on public.daily_energy for select using (true);
+drop policy if exists "daily_energy service write" on public.daily_energy;
+create policy "daily_energy service write"
+    on public.daily_energy for all using (true) with check (true);
+
+grant usage on schema public to anon;
+grant select on public.sync_status  to anon;
+grant select on public.daily_energy to anon;
+
+grant select, insert, update, delete on public.sync_status  to service_role;
+grant select, insert, update, delete on public.daily_energy to service_role;
+
+notify pgrst, 'reload schema';

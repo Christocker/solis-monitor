@@ -124,13 +124,17 @@ Pages:
   Solar / Consumption / Battery charged / Battery discharged (kWh),
   integrated from the recorded readings (never fabricated), plus an
   estimated **CO₂ avoided** (`CO2_KG_PER_KWH`, default 0.7 kg/kWh, shown with
-  a tree-year equivalent). Grid import/export stay unknown — this inverter
-  has no dedicated grid meter.
+  a tree-year equivalent). **Grid power is derived** from the power balance
+  (load − pv − battery) while connected — + import / − export, labelled
+  "estimated" (no grid meter exists); Grid Import/Export kWh integrate from it.
+  Live values carry an **"Updated Xs ago"** indicator; the whole UI has a
+  **light/dark theme** toggle.
 - **History** — charts of recorded data with ranges:
-  **Seconds / Minutes / Hours / Days / All**. "All" spans everything from
-  the first recorded sample to now. Ranges larger than a few hours are
-  fetched through a downsampling function so the full period can be
-  charted in a single request (see "Full history" below).
+  **Seconds / Minutes / Hours / Days / All**, a combined **Overview** chart
+  (PV / load / battery / SOC), time navigation and a **date-time picker**,
+  plus **Share** (bookmarkable `?view=&t=` links) and **CSV export**. "All"
+  spans everything from the first recorded sample to now. Ranges larger than
+  a few hours are fetched through a downsampling function.
 - **System** — system info, connection settings, register diagnostics table
 
 ## Data Logger (SQLite)
@@ -180,6 +184,20 @@ file once in the Supabase SQL Editor (it is idempotent and safe to re-run).
 > reduce the sync cadence (`SYNC_INTERVAL` in `dashboard_app/cloud_sync.py`).
 > The laptop always keeps the complete raw history locally in
 > `solis_history.db`.
+
+## Cloud sync health + daily rollups
+
+`supabase/schema.sql` also creates `sync_status` (a heartbeat the laptop
+upserts every minute) and `daily_energy` (one row per day, upserted every
+5 minutes). The website uses the heartbeat to tell **"laptop offline"** apart
+from **"inverter offline"**, and the daily table powers period summaries.
+Re-run `supabase/schema.sql` once to create them (it is idempotent); until
+then the site simply shows `—` for the heartbeat.
+
+## Installable app (PWA)
+
+The website ships a manifest and a service worker, so it can be **installed**
+to a phone/desktop home screen (offline shell + last-known reading).
 
 ## Architecture (4 layers)
 

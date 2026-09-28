@@ -1245,3 +1245,24 @@ body {
         opacity: 1 !important;
     }
 }
+
+/* ============================================================
+   Touch + accessibility polish
+   ============================================================ */
+:focus-visible {
+    outline: 2px solid var(--tint);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+/* Replace the removed outline on the datetime input with a visible ring. */
+.time-input:focus-visible { outline: 2px solid var(--tint); outline-offset: 1px; }
+
+@media (pointer: coarse) {
+    .range-btn, .nav-btn, .time-input, .tab-link { min-height: 44px; }
+    .time-input { font-size: 16px; }
+}
+
+@supports (padding: env(safe-area-inset-bottom)) {
+    .tab-bar { bottom: calc(12px + env(safe-area-inset-bottom)); }
+    .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+}
