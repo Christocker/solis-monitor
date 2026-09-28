@@ -272,6 +272,17 @@ function setLink(id, direction, power, colorClass, mode) {
     }
 }
 
+
+function updateAlerts(list) {
+    const el = document.getElementById("alert-strip");
+    if (!el) return;
+    if (!list || list.length === 0) { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    el.innerHTML = list.map((a) =>
+        '<span class="alert-chip ' + (a.severity || "warning") + '">' +
+        (a.message || a.key || "alert") + '</span>').join("");
+}
+
 function set(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -293,6 +304,7 @@ async function poll() {
         updateLoad(snapshot.load, snapshot);
         updateEnergy(snapshot.energy);
         updateLifetime(snapshot.energy);
+        updateAlerts(snapshot.alerts);
         updateFlow(snapshot);
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);

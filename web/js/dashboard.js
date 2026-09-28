@@ -161,6 +161,17 @@ function renderCo2(co2) {
     }
 }
 
+
+function updateAlerts(list) {
+    const el = document.getElementById("alert-strip");
+    if (!el) return;
+    if (!list || list.length === 0) { el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    el.innerHTML = list.map((a) =>
+        '<span class="alert-chip ' + (a.severity || "warning") + '">' +
+        (a.message || a.key || "alert") + '</span>').join("");
+}
+
 function set(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
@@ -293,6 +304,7 @@ async function poll() {
 
         // Distinguish "laptop/cloud sync dead" from "inverter offline".
         const sync = await getSyncStatus();
+        updateAlerts(sync && sync.active_alerts);
         if (!snapshot.system.online && sync && sync.last_sync_unix) {
             const syncAge = Date.now() / 1000 - sync.last_sync_unix;
             const pill = document.querySelector("#status-banner .status-pill");

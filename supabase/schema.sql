@@ -224,6 +224,7 @@ create table if not exists public.sync_status (
     last_sync_iso text,
     last_error text,
     error_count integer default 0,
+    active_alerts jsonb default '[]'::jsonb,
     updated_at timestamp with time zone default now()
 );
 

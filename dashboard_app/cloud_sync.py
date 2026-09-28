@@ -213,9 +213,18 @@ class CloudSyncer:
                     time.localtime(self._last_ok or now)),
                 "last_error": self._last_error,
                 "error_count": self._errors,
+                "active_alerts": self._active_alerts(),
             }], self._url, self._key, on_conflict="id")
         except requests.RequestException:
             pass          # heartbeat is best-effort
+
+    @staticmethod
+    def _active_alerts():
+        try:
+            from . import alerts
+            return alerts.active_alerts()
+        except Exception:
+            return []
 
     def _maybe_energy(self):
         now = time.time()

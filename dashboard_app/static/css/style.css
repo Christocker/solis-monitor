@@ -1266,3 +1266,16 @@ body {
     .tab-bar { bottom: calc(12px + env(safe-area-inset-bottom)); }
     .main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
 }
+
+/* ============================================================
+   Alerts strip
+   ============================================================ */
+.alert-strip { display: flex; flex-wrap: wrap; gap: 8px; margin: -8px 0 20px; }
+.alert-chip {
+    padding: 5px 12px; border-radius: var(--radius-pill);
+    font-size: 12px; font-weight: 600;
+}
+.alert-chip.warning { background: rgba(255, 159, 10, 0.15); color: #8a5a00; }
+.alert-chip.critical { background: rgba(255, 59, 48, 0.15); color: #b3261e; }
+:root[data-theme="dark"] .alert-chip.warning { background: rgba(255, 196, 77, 0.18); color: #ffd08a; }
+:root[data-theme="dark"] .alert-chip.critical { background: rgba(255, 90, 82, 0.18); color: #ff9a94; }

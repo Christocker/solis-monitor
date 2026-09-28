@@ -24,6 +24,7 @@ from . import modbus_layer
 from . import normalize
 from . import data_logger
 from . import cloud_sync
+from . import alerts
 
 
 # --- Today's energy totals (integrated from recorded readings) ---
@@ -177,6 +178,7 @@ def _current_snapshot():
     energy = _today_energy_fields()
     energy.update(_lifetime_energy_fields())
     snapshot["energy"] = energy
+    snapshot["alerts"] = alerts.active_alerts()
     return snapshot
 
 
@@ -351,5 +353,6 @@ def create_app():
     # (the S2-WL-ST logger allows only ONE connection at a time).
     if not DEMO_MODE:
         cloud_sync.start_syncer(modbus_layer.reader)
+        alerts.start_alerts()
 
     return app
