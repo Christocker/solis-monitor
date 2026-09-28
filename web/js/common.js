@@ -42,14 +42,25 @@ async function supabaseFetch(url, options = {}, timeoutMs = 20000) {
     }
 }
 
-// Fetch the most recent reading row from Supabase.
+// Fetch the most recent reading row from Supabase (cached for offline use).
 async function fetchLatestReading() {
     const url = SUPABASE_URL + "/rest/v1/readings" +
         "?select=*&order=ts_unix.desc&limit=1";
     const res = await supabaseFetch(url, { headers: supabaseHeaders() });
     if (!res.ok) throw new Error("Supabase HTTP " + res.status);
     const rows = await res.json();
-    return rows[0] || null;
+    const row = rows[0] || null;
+    if (row) {
+        try { localStorage.setItem("solis:last", JSON.stringify(row)); } catch (e) {}
+    }
+    return row;
+}
+
+// Register the service worker (PWA install + offline shell/data).
+if ("serviceWorker" in navigator && location.protocol.indexOf("http") === 0) {
+    window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
 }
 
 // Fetch system info row (serial, model).

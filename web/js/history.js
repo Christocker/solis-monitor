@@ -5,6 +5,7 @@
    ============================================================ */
 
 const charts = {};
+let lastRows = [];
 
 // Chart colors come from the CSS design tokens so light/dark stay in sync.
 function getChartColors() {
@@ -384,6 +385,11 @@ async function loadHistory() {
             ? await fetchReadings(rng.start, rng.end, 10000)
             : await fetchHistoryBuckets(rng.start, rng.end, view.buckets, onProgress);
         if (token !== loadToken) return;  // superseded by a newer request
+        for (const r of rows) {
+            r.load_power = (r.house_load == null && r.backup_load == null)
+                ? null : (r.house_load || 0) + (r.backup_load || 0);
+        }
+        lastRows = rows;
         if (!rows || rows.length === 0) {
             clearCharts();
             statusEl.textContent = "No recorded data in this range yet.";
@@ -454,6 +460,46 @@ function setupShare() {
         }
     });
     bar.appendChild(btn);
+}
+
+function setupExport() {
+    const bar = document.querySelector(".time-nav");
+    if (!bar || document.getElementById("export-btn")) return;
+    const btn = document.createElement("button");
+    btn.id = "export-btn";
+    btn.className = "nav-btn latest";
+    btn.type = "button";
+    btn.textContent = "CSV";
+    btn.title = "Download the current range as CSV";
+    btn.addEventListener("click", exportCSV);
+    bar.appendChild(btn);
+}
+
+function exportCSV() {
+    if (!lastRows || lastRows.length === 0) return;
+    const cols = ["pv1_voltage", "pv1_current", "pv2_voltage", "pv2_current",
+                  "pv_power", "grid_voltage", "grid_frequency",
+                  "battery_voltage", "battery_current", "battery_power",
+                  "battery_soc", "battery_soh", "house_load", "backup_load"];
+    const lines = ["ts_unix,ts_iso," + cols.join(",") + ",load_power,samples"];
+    for (const r of lastRows) {
+        const iso = r.ts_iso || r.ts ||
+            new Date((r.ts_unix || 0) * 1000).toISOString().replace("T", " ").slice(0, 19);
+        const load = (r.house_load == null && r.backup_load == null) ? ""
+            : ((r.house_load || 0) + (r.backup_load || 0));
+        const vals = cols.map((c) => (r[c] == null ? "" : r[c]));
+        lines.push([r.ts_unix, '"' + iso + '"', ...vals, load,
+                    r.samples == null ? "" : r.samples].join(","));
+    }
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "solis-history-" + currentView + "-" +
+        new Date().toISOString().slice(0, 10) + ".csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 function setupViewButtons() {
@@ -565,6 +611,7 @@ document.addEventListener("DOMContentLoaded", () => {
     setupViewButtons();
     setupTimeNav();
     setupShare();
+    setupExport();
     writeState();
     loadHistory();
     // Auto-refresh only the live, cheap ranges. When pinned to a past window

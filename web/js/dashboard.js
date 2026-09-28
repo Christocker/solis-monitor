@@ -283,6 +283,28 @@ async function poll() {
     } catch (err) {
         anyError = true;
         updateGlobalStatus(null);
+        // First load offline: fall back to the last reading cached locally.
+        if (!lastGood) {
+            try {
+                const cached = JSON.parse(localStorage.getItem("solis:last") || "null");
+                const snap = cached ? buildSnapshot(cached, _sysInfo || null) : null;
+                if (snap) {
+                    lastGood = snap;
+                    updateSolar(snap.solar);
+                    updateBattery(snap.battery);
+                    updateGrid(snap.grid);
+                    updateLoad(snap.load, snap);
+                    updateFlow(snap);
+                    updateLastUpdate(snap);
+                    const p = document.querySelector("#status-banner .status-pill");
+                    if (p) {
+                        p.className = "status-pill pill-warn";
+                        p.innerHTML = '<span class="dot dot-warn"></span> OFFLINE \u2014 LAST KNOWN DATA';
+                    }
+                    return;
+                }
+            } catch (e) { /* ignore */ }
+        }
         const pill = document.querySelector("#status-banner .status-pill");
         if (pill) {
             pill.className = "status-pill pill-error";
