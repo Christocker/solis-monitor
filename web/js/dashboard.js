@@ -260,6 +260,7 @@ async function getSystemInfo() {
 }
 
 let pollBusy = false;
+let anyError = false;
 async function poll() {
     if (pollBusy) return;                    // don't stack requests
     pollBusy = true;
@@ -270,6 +271,7 @@ async function poll() {
         const snapshot = buildSnapshot(row, sysInfo);
         lastGood = snapshot;
         if (!snapshot) throw new Error("no data yet");
+        anyError = false;
         updateStatusBanner(snapshot);
         updateSolar(snapshot.solar);
         updateBattery(snapshot.battery);
@@ -279,6 +281,7 @@ async function poll() {
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);
     } catch (err) {
+        anyError = true;
         updateGlobalStatus(null);
         const pill = document.querySelector("#status-banner .status-pill");
         if (pill) {
@@ -396,8 +399,27 @@ async function refreshLifetime() {
     }
 }
 
-poll();
-setInterval(poll, 2000);
+// --- Polling with exponential backoff and visibility gating ---
+let pollDelay = 2000;
+let pollTimer = null;
+
+async function pollCycle() {
+    await poll();
+    pollDelay = anyError ? Math.min(pollDelay * 2, 30000) : 2000;
+    schedulePoll();
+}
+function schedulePoll() {
+    clearTimeout(pollTimer);
+    const base = document.hidden ? Math.max(pollDelay, 15000) : pollDelay;
+    pollTimer = setTimeout(pollCycle, base);
+}
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { clearTimeout(pollTimer); pollCycle(); }
+});
+// Keep the "Updated Xs ago" label ticking between polls.
+setInterval(() => { if (lastGood) updateLastUpdate(lastGood); }, 1000);
+
+pollCycle();
 refreshEnergy();
 setInterval(refreshEnergy, 60000);
 refreshLifetime();

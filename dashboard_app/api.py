@@ -147,7 +147,8 @@ def _current_snapshot():
     # freshness, so a dead poller cannot keep claiming SYSTEM ONLINE.
     now = time.time()
     last = stats.get("last_success_time")
-    stale_after = max(3 * POLL_INTERVAL, 10.0)
+    # Match the web client's freshness window (30 s).
+    stale_after = max(15 * POLL_INTERVAL, 30.0)
     age = (now - last) if last is not None else None
     fresh = age is not None and age <= stale_after
     data_ts = last if last is not None else now
@@ -158,6 +159,7 @@ def _current_snapshot():
     system["age_seconds"] = round(age, 1) if age is not None else None
     iso = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(data_ts))
     system["last_update"] = iso
+    system["data_ts_unix"] = data_ts
     snapshot["system"] = system
     snapshot["timestamp"] = iso
 

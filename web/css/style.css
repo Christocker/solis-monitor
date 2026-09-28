@@ -15,12 +15,22 @@
    Design tokens
    ============================================================ */
 :root {
+    color-scheme: light;
     /* Surfaces */
     --bg: #f5f5f7;
     --bg-elevated: #ffffff;
     --surface: #ffffff;
     --surface-muted: #f5f5f7;
     --surface-pressed: #ebebed;
+    /* Theme-aware extras */
+    --track: rgba(0, 0, 0, 0.06);
+    --hover-overlay: rgba(0, 0, 0, 0.045);
+    --scrollbar: rgba(0, 0, 0, 0.18);
+    --scrollbar-hover: rgba(0, 0, 0, 0.30);
+    --selection: rgba(0, 113, 227, 0.15);
+    --topbar-bg: rgba(245, 245, 247, 0.82);
+    --tabbar-bg: rgba(255, 255, 255, 0.92);
+    --icon-bg: #ffffff;
 
     /* Hairlines & shadows (soft, restrained) */
     --hairline: rgba(0, 0, 0, 0.08);
@@ -64,6 +74,44 @@
         "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
 }
 
+/* ============================================================
+   Dark theme (resolved by an inline script into data-theme)
+   ============================================================ */
+:root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b0b0d;
+    --bg-elevated: #1c1c1e;
+    --surface: #1c1c1e;
+    --surface-muted: #232326;
+    --surface-pressed: #2c2c2e;
+    --track: rgba(255, 255, 255, 0.12);
+    --hover-overlay: rgba(255, 255, 255, 0.07);
+    --scrollbar: rgba(255, 255, 255, 0.22);
+    --scrollbar-hover: rgba(255, 255, 255, 0.34);
+    --selection: rgba(10, 132, 255, 0.35);
+    --topbar-bg: rgba(15, 15, 17, 0.72);
+    --tabbar-bg: rgba(28, 28, 30, 0.94);
+    --icon-bg: #2c2c2e;
+    --hairline: rgba(255, 255, 255, 0.10);
+    --hairline-strong: rgba(255, 255, 255, 0.20);
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.45);
+    --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.5), 0 16px 40px rgba(0, 0, 0, 0.55);
+    --hover-shadow: 0 8px 30px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.4);
+    --text: #f5f5f7;
+    --text-secondary: #b8b8bd;
+    --text-tertiary: #9a9aa0;
+    --text-on-accent: #ffffff;
+    --tint: #0a84ff;
+    --solar: #ffa53a;
+    --battery: #3ddc84;
+    --grid: #4aa3ff;
+    --load: #c77dff;
+    --teal: #4cd0e0;
+    --danger: #ff5a52;
+    --warning: #ffc44d;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
@@ -78,16 +126,16 @@ body {
     overflow-x: hidden;
 }
 
-::selection { background: rgba(0, 113, 227, 0.15); }
+::selection { background: var(--selection); }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-    background: rgba(0, 0, 0, 0.18);
+    background: var(--scrollbar);
     border-radius: 999px;
     border: 3px solid var(--bg);
 }
-::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.3); }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-hover); }
 
 /* Legacy decorative layers removed — clean flat background */
 .aurora, .grain { display: none; }
@@ -99,7 +147,7 @@ body {
     position: sticky;
     top: 0;
     z-index: 40;
-    background: rgba(245, 245, 247, 0.82);
+    background: var(--topbar-bg);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     backdrop-filter: saturate(180%) blur(20px);
     border-bottom: 1px solid var(--hairline);
@@ -161,9 +209,9 @@ body {
 }
 .nav-link svg { width: 16px; height: 16px; }
 @media (hover: hover) and (pointer: fine) {
-    .nav-link:hover { background: rgba(0, 0, 0, 0.05); color: var(--text); }
+    .nav-link:hover { background: var(--hover-overlay); color: var(--text); }
 }
-.nav-link.active { background: rgba(0, 0, 0, 0.07); color: var(--text); font-weight: 600; }
+.nav-link.active { background: var(--hover-overlay); color: var(--text); font-weight: 600; }
 
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 
@@ -207,6 +255,8 @@ body {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
+.last-update.age-warn { color: var(--warning); }
+.last-update.age-stale { color: var(--danger); }
 
 .demo-badge {
     display: inline-block;
@@ -219,6 +269,27 @@ body {
     font-weight: 700;
     letter-spacing: 0.04em;
 }
+
+/* Theme toggle button (added to the topbar by setupTheme) */
+.theme-toggle {
+    width: 34px; height: 34px;
+    margin-left: 10px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    border: 1px solid var(--hairline);
+    background: var(--surface-muted);
+    color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.3s var(--butter), color 0.3s var(--ease);
+}
+.theme-toggle svg { width: 17px; height: 17px; }
+@media (hover: hover) and (pointer: fine) {
+    .theme-toggle:hover { color: var(--text); background: var(--surface-pressed); }
+}
+:root[data-theme="dark"] .demo-badge { background: rgba(255, 159, 10, 0.22); color: #ffd08a; }
 
 /* ============================================================
    Status pills
@@ -293,7 +364,7 @@ body {
     .card:hover {
         box-shadow: var(--shadow-md);
         border-color: var(--hairline-strong);
-        background: #ffffff;
+        background: var(--surface);
     }
 }
 
@@ -410,7 +481,7 @@ body {
 }
 .soc-ring:hover { transform: scale(1.05); }
 .soc-ring svg { transform: rotate(-90deg); width: 96px; height: 96px; }
-.soc-ring .track { stroke: rgba(0, 0, 0, 0.07); }
+.soc-ring .track { stroke: var(--track); }
 .soc-ring .fill {
     stroke: url(#socGrad);
     stroke-linecap: round;
@@ -505,8 +576,8 @@ body {
 @media (hover: hover) and (pointer: fine) {
     .flow-node:hover {
         border-color: var(--hairline-strong);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
-        background: #ffffff;
+        box-shadow: var(--hover-shadow);
+        background: var(--surface);
     }
 }
 
@@ -567,7 +638,7 @@ body {
     padding: 14px 22px;
 }
 .inverter-node .flow-node-name { color: var(--grid); font-size: 12px; }
-.inverter-node .flow-node-icon { color: var(--grid); background: #fff; }
+.inverter-node .flow-node-icon { color: var(--grid); background: var(--icon-bg); }
 
 /* ============================================================
    Energy flow — connectors
@@ -952,7 +1023,7 @@ body {
 @media (hover: hover) and (pointer: fine) {
     .range-btn:hover {
         color: var(--text);
-        background: rgba(0, 0, 0, 0.04);
+        background: var(--hover-overlay);
     }
 }
 .range-btn.active {
@@ -1040,7 +1111,7 @@ body {
     bottom: 14px;
     transform: translateX(-50%);
     z-index: 50;
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--tabbar-bg);
     -webkit-backdrop-filter: saturate(180%) blur(20px);
     backdrop-filter: saturate(180%) blur(20px);
     border: 1px solid var(--hairline);

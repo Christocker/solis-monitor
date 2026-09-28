@@ -5,16 +5,23 @@
    ============================================================ */
 
 const charts = {};
-const COLORS = {
-    solar: "#ff9500",
-    load: "#af52de",
-    battery: "#34c759",
-    grid: "#0071e3",
-    teal: "#30b0c7",
-    text: "#86868b",
-    gridLine: "rgba(0, 0, 0, 0.08)",
-    tooltipBg: "rgba(255, 255, 255, 0.98)",
-};
+
+// Chart colors come from the CSS design tokens so light/dark stay in sync.
+function getChartColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name, fallback) => (cs.getPropertyValue(name) || fallback).trim() || fallback;
+    return {
+        solar: v("--solar", "#ff9500"),
+        load: v("--load", "#af52de"),
+        battery: v("--battery", "#34c759"),
+        grid: v("--grid", "#0071e3"),
+        teal: v("--teal", "#30b0c7"),
+        text: v("--text-tertiary", "#6e6e73"),
+        gridLine: v("--hairline", "rgba(0, 0, 0, 0.08)"),
+        tooltipBg: v("--surface", "#ffffff"),
+    };
+}
+let COLORS = getChartColors();
 
 /* ---------------- Chart factory ---------------- */
 
@@ -27,7 +34,7 @@ function baseOptions(yTitle) {
         plugins: {
             legend: { display: false },
             tooltip: {
-                backgroundColor: COLORS.tooltipBg, titleColor: "#1d1d1f",
+                backgroundColor: COLORS.tooltipBg, titleColor: COLORS.text,
                 bodyColor: "#3a3a3c", borderColor: "rgba(0,0,0,0.1)",
                 borderWidth: 1, cornerRadius: 10, padding: 10,
                 displayColors: false,
@@ -107,36 +114,36 @@ function makeBarChart(canvasId, positiveColor, negativeColor) {
 ---------------------------------------------------- */
 const CHART_DEFS = [
     { id: "chart-pv", title: "PV Power", col: "pv_power", unit: "W",
-      type: "area", color: COLORS.solar, group: 1 },
+      type: "area", color: "solar", group: 1 },
     { id: "chart-pv1-v", title: "PV1 Voltage", col: "pv1_voltage", unit: "V",
-      type: "line", color: COLORS.solar, group: 1 },
+      type: "line", color: "solar", group: 1 },
     { id: "chart-pv1-a", title: "PV1 Current", col: "pv1_current", unit: "A",
-      type: "line", color: COLORS.solar, group: 1 },
+      type: "line", color: "solar", group: 1 },
     { id: "chart-pv2-v", title: "PV2 Voltage", col: "pv2_voltage", unit: "V",
-      type: "line", color: COLORS.solar, group: 1 },
+      type: "line", color: "solar", group: 1 },
     { id: "chart-pv2-a", title: "PV2 Current", col: "pv2_current", unit: "A",
-      type: "line", color: COLORS.solar, group: 1 },
+      type: "line", color: "solar", group: 1 },
 
     { id: "chart-grid-v", title: "Grid Voltage", col: "grid_voltage", unit: "V",
-      type: "line", color: COLORS.grid, group: 2 },
+      type: "line", color: "grid", group: 2 },
     { id: "chart-grid-f", title: "Grid Frequency", col: "grid_frequency", unit: "Hz",
-      type: "line", color: COLORS.grid, group: 2 },
+      type: "line", color: "grid", group: 2 },
 
     { id: "chart-batt-v", title: "Battery Voltage", col: "battery_voltage", unit: "V",
-      type: "line", color: COLORS.battery, group: 3 },
+      type: "line", color: "battery", group: 3 },
     { id: "chart-batt-a", title: "Battery Current", col: "battery_current", unit: "A",
-      type: "line", color: COLORS.battery, group: 3 },
+      type: "line", color: "battery", group: 3 },
     { id: "chart-batt-w", title: "Battery Power", col: "battery_power", unit: "W",
-      type: "line", color: COLORS.battery, group: 3 },
+      type: "line", color: "battery", group: 3 },
     { id: "chart-soc", title: "Battery SOC", col: "battery_soc", unit: "%",
-      type: "line", color: COLORS.battery, group: 3 },
+      type: "line", color: "battery", group: 3 },
     { id: "chart-soh", title: "Battery SOH", col: "battery_soh", unit: "%",
-      type: "line", color: COLORS.teal, group: 3 },
+      type: "line", color: "teal", group: 3 },
 
     { id: "chart-house-load", title: "House Load", col: "house_load", unit: "W",
-      type: "area", color: COLORS.load, group: 4 },
+      type: "area", color: "load", group: 4 },
     { id: "chart-backup-load", title: "Backup Load", col: "backup_load", unit: "W",
-      type: "area", color: COLORS.load, group: 4 },
+      type: "area", color: "load", group: 4 },
 ];
 
 /* ---------------- Stat definitions ---------------- */
@@ -168,9 +175,10 @@ const STAT_DEFS = [
 
 function initCharts() {
     for (const def of CHART_DEFS) {
-        if (def.type === "area") charts[def.id] = makeAreaChart(def.id, def.color);
-        else if (def.type === "bar") charts[def.id] = makeBarChart(def.id, def.color, def.negColor || COLORS.grid);
-        else charts[def.id] = makeLineChart(def.id, def.color);
+        const color = COLORS[def.color] || def.color;
+        if (def.type === "area") charts[def.id] = makeAreaChart(def.id, color);
+        else if (def.type === "bar") charts[def.id] = makeBarChart(def.id, color, COLORS.grid);
+        else charts[def.id] = makeLineChart(def.id, color);
     }
 }
 
@@ -351,8 +359,9 @@ function renderCharts(rows, view) {
         chart.data.labels = agg.labels;
         chart.data.datasets = [{ data: agg.data }];
         if (def.type === "line") {
-            chart.data.datasets[0].borderColor = def.color;
-            chart.data.datasets[0].backgroundColor = def.color + "22";
+            const col = COLORS[def.color] || def.color;
+            chart.data.datasets[0].borderColor = col;
+            chart.data.datasets[0].backgroundColor = col + "22";
         }
         chart.update();
     }
@@ -394,16 +403,72 @@ async function loadHistory() {
     }
 }
 
+// ---- URL state (bookmark / share) ----
+function writeState() {
+    try {
+        const p = new URLSearchParams();
+        p.set("view", currentView);
+        if (anchorUnix != null) p.set("t", String(Math.round(anchorUnix)));
+        history.replaceState(null, "", location.pathname + "?" + p.toString());
+    } catch (e) { /* ignore */ }
+}
+
+function readStateFromURL() {
+    try {
+        const p = new URLSearchParams(location.search);
+        const view = p.get("view");
+        if (view && VIEWS[view]) currentView = view;
+        const t = p.get("t");
+        anchorUnix = (t && !isNaN(Number(t))) ? Number(t) : null;
+    } catch (e) { /* ignore */ }
+}
+
+function syncViewButtons() {
+    document.querySelectorAll(".range-btn").forEach((b) => {
+        const on = b.dataset.range === currentView;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+}
+
+function setupShare() {
+    const bar = document.querySelector(".time-nav");
+    if (!bar || document.getElementById("share-btn")) return;
+    const btn = document.createElement("button");
+    btn.id = "share-btn";
+    btn.className = "nav-btn latest";
+    btn.type = "button";
+    btn.textContent = "Share";
+    btn.title = "Copy a link to this view";
+    btn.addEventListener("click", async () => {
+        const url = location.href;
+        try {
+            if (navigator.share) { await navigator.share({ title: document.title, url }); return; }
+        } catch (e) { /* cancelled or unsupported */ }
+        try {
+            await navigator.clipboard.writeText(url);
+            btn.textContent = "Copied!";
+            setTimeout(() => { btn.textContent = "Share"; }, 1500);
+        } catch (e) {
+            window.prompt("Copy this link:", url);
+        }
+    });
+    bar.appendChild(btn);
+}
+
 function setupViewButtons() {
     document.querySelectorAll(".range-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             document.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
             btn.classList.add("active");
             currentView = btn.dataset.range;
+            syncViewButtons();
+            writeState();
             updateTimeNav();
             loadHistory();
         });
     });
+    syncViewButtons();
 }
 
 // ---- Time navigation (explore the past at any resolution) ----
@@ -422,6 +487,7 @@ function shiftWindow(dir) {
     let a = windowEnd() + dir * w;
     if (a > now) a = now;
     anchorUnix = a >= now - 1 ? null : a;    // snap back to live at the end
+    writeState();
     updateTimeNav();
     loadHistory();
 }
@@ -434,11 +500,12 @@ function setupTimeNav() {
     if (prev) prev.addEventListener("click", () => shiftWindow(-1));
     if (next) next.addEventListener("click", () => shiftWindow(1));
     if (nowBtn) nowBtn.addEventListener("click", () => {
-        anchorUnix = null; updateTimeNav(); loadHistory();
+        anchorUnix = null; writeState(); updateTimeNav(); loadHistory();
     });
     if (input) input.addEventListener("change", () => {
         const t = input.value ? Math.floor(new Date(input.value).getTime() / 1000) : null;
         anchorUnix = (t && t > Date.now() / 1000) ? null : t;
+        writeState();
         updateTimeNav();
         loadHistory();
     });
@@ -474,10 +541,31 @@ function updateTimeNav(rng) {
     }
 }
 
+// Rebuild charts with the new palette when the theme changes.
+window.addEventListener("themechange", () => {
+    COLORS = getChartColors();
+    for (const k of Object.keys(charts)) {
+        if (charts[k]) charts[k].destroy();
+        delete charts[k];
+    }
+    initCharts();
+    loadHistory();
+});
+
+window.addEventListener("popstate", () => {
+    readStateFromURL();
+    syncViewButtons();
+    updateTimeNav();
+    loadHistory();
+});
+
 document.addEventListener("DOMContentLoaded", () => {
+    readStateFromURL();
     initCharts();
     setupViewButtons();
     setupTimeNav();
+    setupShare();
+    writeState();
     loadHistory();
     // Auto-refresh only the live, cheap ranges. When pinned to a past window
     // the data is static, so there is nothing to refresh.

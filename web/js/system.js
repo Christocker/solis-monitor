@@ -136,6 +136,6 @@ async function refreshTotalReadings() {
 document.addEventListener("DOMContentLoaded", () => {
     loadSystem();
     refreshTotalReadings();
-    setInterval(loadSystem, 2000);
+    setInterval(() => { if (!document.hidden) loadSystem(); }, 2000);
     setInterval(refreshTotalReadings, 60000);
 });

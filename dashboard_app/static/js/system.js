@@ -125,4 +125,4 @@ function set(id, text) {
 
 loadConfig();
 loadStatus();
-setInterval(loadStatus, 2000);
+setInterval(() => { if (!document.hidden) loadStatus(); }, 2000);

@@ -278,12 +278,14 @@ function set(id, text) {
 }
 
 let pollBusy = false;
+let anyError = false;
 async function poll() {
     if (pollBusy) return;                    // don't stack requests
     pollBusy = true;
     try {
         const snapshot = await fetchJSON("/api/status");
         lastGood = snapshot;
+        anyError = false;
         updateStatusBanner(snapshot);
         updateSolar(snapshot.solar);
         updateBattery(snapshot.battery);
@@ -297,6 +299,7 @@ async function poll() {
     } catch (err) {
         // Network/server error — show offline and clear the grid state too,
         // so a stale "GRID CONNECTED" is never shown next to CONNECTION LOST.
+        anyError = true;
         updateGlobalStatus(null);
         const pill = document.querySelector("#status-banner .status-pill");
         if (pill) {
@@ -317,6 +320,27 @@ async function poll() {
     }
 }
 
-// Poll every 2 seconds.
-poll();
-setInterval(poll, 2000);
+// --- Polling with exponential backoff and visibility gating ---
+let pollDelay = 2000;
+let pollTimer = null;
+
+async function pollCycle() {
+    await poll();
+    pollDelay = anyError ? Math.min(pollDelay * 2, 30000) : 2000;
+    schedulePoll();
+}
+
+function schedulePoll() {
+    clearTimeout(pollTimer);
+    const base = document.hidden ? Math.max(pollDelay, 15000) : pollDelay;
+    pollTimer = setTimeout(pollCycle, base);
+}
+
+document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) { clearTimeout(pollTimer); pollCycle(); }
+});
+
+// Keep the "Updated Xs ago" label ticking between polls.
+setInterval(() => { if (lastGood) updateLastUpdate(lastGood); }, 1000);
+
+pollCycle();
