@@ -174,6 +174,35 @@ const STAT_DEFS = [
     { id: "stat-backup-avg", label: "Avg Backup Load", unit: "W", fn: (rows) => fmt3(avgOf(rows, "backup_load")) },
 ];
 
+function makeOverviewChart() {
+    const ctx = document.getElementById("chart-overview");
+    if (!ctx) return null;
+    const opts = baseOptions("Power (W)");
+    opts.plugins.legend = { display: true,
+        labels: { color: COLORS.text, boxWidth: 10, font: { size: 11 } } };
+    opts.interaction = { mode: "index", intersect: false };
+    opts.scales.y2 = {
+        position: "right", beginAtZero: true, max: 100,
+        grid: { drawOnChartArea: false },
+        ticks: { color: COLORS.text, font: { size: 11 } },
+        title: { display: true, text: "SOC (%)", color: COLORS.text, font: { size: 11 } },
+    };
+    const ds = (label, color, axis, extra) => Object.assign({
+        label, data: [], borderColor: color, tension: 0.35, borderWidth: 2,
+        pointRadius: 0, yAxisID: axis || "y",
+    }, extra || {});
+    return new Chart(ctx, {
+        type: "line",
+        data: { labels: [], datasets: [
+            ds("PV Power", COLORS.solar, "y", { backgroundColor: COLORS.solar + "22", fill: true }),
+            ds("Load", COLORS.load, "y"),
+            ds("Battery", COLORS.battery, "y"),
+            ds("SOC", COLORS.teal, "y2", { borderDash: [4, 4] }),
+        ] },
+        options: opts,
+    });
+}
+
 function initCharts() {
     for (const def of CHART_DEFS) {
         const color = COLORS[def.color] || def.color;
@@ -181,6 +210,8 @@ function initCharts() {
         else if (def.type === "bar") charts[def.id] = makeBarChart(def.id, color, COLORS.grid);
         else charts[def.id] = makeLineChart(def.id, color);
     }
+    const ov = makeOverviewChart();
+    if (ov) charts["chart-overview"] = ov;
 }
 
 /* ---------------- View handling ---------------- */
@@ -365,6 +396,20 @@ function renderCharts(rows, view) {
             chart.data.datasets[0].backgroundColor = col + "22";
         }
         chart.update();
+    }
+
+    const ov = charts["chart-overview"];
+    if (ov) {
+        const aPv = aggregate(rows, view, points, "pv_power");
+        const aLoad = aggregate(rows, view, points, "load_power");
+        const aBatt = aggregate(rows, view, points, "battery_power");
+        const aSoc = aggregate(rows, view, points, "battery_soc");
+        ov.data.labels = aPv.labels;
+        ov.data.datasets[0].data = aPv.data;
+        ov.data.datasets[1].data = aLoad.data;
+        ov.data.datasets[2].data = aBatt.data;
+        ov.data.datasets[3].data = aSoc.data;
+        ov.update();
     }
 }
 
