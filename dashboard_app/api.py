@@ -61,9 +61,10 @@ def _today_energy_fields():
                                               val("battery_charge")),
         "today_battery_discharge": _energy_field("Today's Battery Discharged",
                                                  val("battery_discharge")),
-        # This inverter has no dedicated grid import/export meter.
-        "grid_import": _energy_field("Grid Import", None),
-        "grid_export": _energy_field("Grid Export", None),
+        # Grid import/export are derived from the power balance (only from the
+        # point where the battery sign is trustworthy).
+        "grid_import": _energy_field("Grid Import", val("grid_import")),
+        "grid_export": _energy_field("Grid Export", val("grid_export")),
     }
     _energy_cache["t"] = now
     _energy_cache["fields"] = fields

@@ -345,6 +345,8 @@ def build_demo_snapshot():
         "house_load": _reg16(0, 1),
         "backup_load": _reg16(1160, 40),
         "battery_power": _reg32(0, 10, signed=True),
+        "battery_direction": _reg16(1),   # discharging
+        "grid_current": _reg16(0, 1),
     }
     errors = {k: None for k in raw}
     return raw, errors

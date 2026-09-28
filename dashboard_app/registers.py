@@ -182,6 +182,21 @@ SENSOR_REGISTERS = [
         "display": True,
     },
     {
+        # Read by solis_verified_read.py; not yet verified against the LCD.
+        # Kept as a diagnostic so it can be checked next time the grid is on.
+        "key": "grid_current",
+        "name": "Grid Current",
+        "address": 33076,
+        "count": 1,
+        "function": 4,
+        "data_type": "u16",      # re-check sign/type when the grid is next on
+        "scale": 0.1,
+        "unit": "A",
+        "state": DOCUMENTED,
+        "source": "ESINV-33000ID protocol; NOT YET VERIFIED",
+        "display": False,
+    },
+    {
         "key": "grid_frequency",
         "name": "Grid Frequency",
         "address": 33094,

@@ -279,6 +279,11 @@ function energyMaxGap(rows) {
     return ENERGY_GAP_SECONDS;
 }
 
+// Grid energy is derived from the power balance, so it is only integrated
+// once the battery sign is trustworthy (post battery-direction fix).
+const GRID_ENERGY_VALID_FROM = 1789860600;   // 2026-09-20 07:30 +0800
+const GRID_CONNECTED_V = 50;
+
 // Integrate power buckets into energy (kWh). Returns field objects shaped
 // like snapshot.energy so the dashboard's updateEnergy() can render them.
 function computeEnergy(rows) {
@@ -292,6 +297,7 @@ function computeEnergy(rows) {
     }
     const maxGap = energyMaxGap(rows);
     let solar = 0, consumption = 0, charge = 0, discharge = 0;
+    let gridImport = 0, gridExport = 0;
     let prev = null;
     for (const r of rows) {
         const load = (r.house_load || 0) + (r.backup_load || 0);
@@ -306,9 +312,23 @@ function computeEnergy(rows) {
                     const e = (prev.batt + r.battery_power) / 2 * dt;
                     if (e > 0) discharge += e; else charge += -e;
                 }
+                // Derived grid import/export (on-grid intervals only).
+                if (r.ts_unix >= GRID_ENERGY_VALID_FROM
+                        && prev.ts >= GRID_ENERGY_VALID_FROM
+                        && prev.gv != null && r.grid_voltage != null
+                        && prev.gv >= GRID_CONNECTED_V && r.grid_voltage >= GRID_CONNECTED_V
+                        && prev.pv != null && r.pv_power != null
+                        && prev.batt != null && r.battery_power != null
+                        && prev.load != null) {
+                    const gPrev = prev.load - prev.pv - prev.batt;
+                    const gNow = load - r.pv_power - r.battery_power;
+                    const e = (gPrev + gNow) / 2 * dt;
+                    if (e >= 0) gridImport += e; else gridExport += -e;
+                }
             }
         }
-        prev = { ts: r.ts_unix, pv: r.pv_power, batt: r.battery_power, load: load };
+        prev = { ts: r.ts_unix, pv: r.pv_power, batt: r.battery_power,
+                 load: load, gv: r.grid_voltage };
     }
     const kwh = 3.6e6;
     const field = (v) => ({
@@ -319,9 +339,8 @@ function computeEnergy(rows) {
         today_consumption: field(consumption),
         today_battery_charge: field(charge),
         today_battery_discharge: field(discharge),
-        // No dedicated grid import/export meter exists on this inverter.
-        grid_import: unavailable(),
-        grid_export: unavailable(),
+        grid_import: field(gridImport),
+        grid_export: field(gridExport),
     };
 }
 
@@ -332,6 +351,27 @@ function field(value, unit) {
         return { value: null, state: "unavailable", unit: unit || "" };
     }
     return { value: value, state: "available", unit: unit || "" };
+}
+
+// Grid power is derived from the balance of measured powers (there is no grid
+// meter):  grid = load - pv - battery   (+battery = discharging)
+// positive = importing, negative = exporting. Null when not derivable.
+const GRID_POWER_DEADBAND_W = 50;
+function derivedGridPower(row) {
+    if (!row || row.grid_voltage == null || row.grid_voltage < 50) return null;
+    if (row.pv_power == null || row.battery_power == null) return null;
+    if (row.house_load == null && row.backup_load == null) return null;
+    const load = (row.house_load || 0) + (row.backup_load || 0);
+    let p = load - row.pv_power - row.battery_power;
+    if (Math.abs(p) < GRID_POWER_DEADBAND_W) p = 0;
+    return p;
+}
+
+// Total consumption = house + backup ports (33147 is normally 0 on this
+// installation and 33148 carries the load in both grid states).
+function totalLoad(row) {
+    if (row.house_load == null && row.backup_load == null) return null;
+    return (row.house_load || 0) + (row.backup_load || 0);
 }
 
 // Build a normalized snapshot (same shape as the local Flask API)
@@ -364,14 +404,11 @@ function buildSnapshot(row, sysInfo) {
         grid: {
             voltage: field(row.grid_voltage, "V"),
             frequency: field(row.grid_frequency, "Hz"),
-            power: field(null, "W"),   // grid import/export not verified
+            power: field(derivedGridPower(row), "W"),   // derived estimate
             connected: connected,
         },
         load: {
-            // Match the local backend: pick the port that is actually in use
-            // (backup when off-grid, grid port otherwise).
-            power: field(
-                connected === false ? row.backup_load : row.house_load, "W"),
+            power: field(totalLoad(row), "W"),
             house_load: field(row.house_load, "W"),
             backup_power: field(row.backup_load, "W"),
         },

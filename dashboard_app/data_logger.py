@@ -21,10 +21,16 @@ import time
 
 from . import modbus_layer
 from . import normalize
-from .config import POLL_INTERVAL
+from .config import POLL_INTERVAL, GRID_CONNECTED_THRESHOLD_V
 
 # Database file lives next to the app (project root).
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "solis_history.db")
+
+# Signed battery_power is only trustworthy from this timestamp on (the
+# battery-direction fix, commit b1c602e; first correct row 2026-09-20 07:32
+# +0800). Grid energy is derived from the power balance, so it is only
+# integrated from here to avoid the historically wrong battery signs.
+GRID_ENERGY_VALID_FROM = 1789860600.0
 
 # Columns stored for every reading.
 # key -> (column_name, converter)
@@ -211,16 +217,19 @@ class DataLogger:
         """Integrate power over time to get energy (kWh) for a time range.
 
         Returns a dict:
-            solar, consumption, battery_charge, battery_discharge  (kWh, floats)
-            samples   : number of raw rows in the range
-        Consumption is house_load + backup_load (the two ports are used in
-        different modes). Intervals longer than `max_gap` seconds are skipped
-        so missing data never fabricates energy.
+            solar, consumption, battery_charge, battery_discharge (kWh)
+            grid_import, grid_export (kWh, derived from the power balance)
+            samples, intervals
+        Consumption is house_load + backup_load. Grid energy is only integrated
+        from GRID_ENERGY_VALID_FROM, where the battery sign is trustworthy.
+        Intervals longer than `max_gap` seconds are skipped so missing data
+        never fabricates energy.
         """
         conn = self._connect()
         try:
             cur = conn.execute(
-                "SELECT ts_unix, pv_power, battery_power, house_load, backup_load "
+                "SELECT ts_unix, pv_power, battery_power, house_load, "
+                "backup_load, grid_voltage "
                 "FROM readings WHERE ts_unix >= ? AND ts_unix <= ? "
                 "ORDER BY ts_unix ASC",
                 (start_unix, end_unix),
@@ -230,9 +239,10 @@ class DataLogger:
             conn.close()
 
         solar = consumption = charge = discharge = 0.0
+        grid_import = grid_export = 0.0
         prev = None
         intervals = 0
-        for ts, pv, batt, house, backup in rows:
+        for ts, pv, batt, house, backup, gv in rows:
             load = None
             if house is not None or backup is not None:
                 load = (house or 0.0) + (backup or 0.0)
@@ -253,9 +263,27 @@ class DataLogger:
                     if prev[3] is not None and load is not None:
                         consumption += (prev[3] + load) / 2.0 * dt
                         used = True
+                    # Derived grid import/export (only once the battery sign is
+                    # trustworthy and both endpoints are grid-connected).
+                    if (ts >= GRID_ENERGY_VALID_FROM
+                            and prev[0] >= GRID_ENERGY_VALID_FROM
+                            and gv is not None and prev[4] is not None
+                            and gv >= GRID_CONNECTED_THRESHOLD_V
+                            and prev[4] >= GRID_CONNECTED_THRESHOLD_V
+                            and prev[1] is not None and pv is not None
+                            and prev[2] is not None and batt is not None
+                            and prev[3] is not None and load is not None):
+                        g_prev = prev[3] - prev[1] - prev[2]
+                        g_now = load - pv - batt
+                        e = (g_prev + g_now) / 2.0 * dt
+                        if e >= 0:
+                            grid_import += e
+                        else:
+                            grid_export += -e
+                        used = True
                     if used:
                         intervals += 1
-            prev = (ts, pv, batt, load)
+            prev = (ts, pv, batt, load, gv)
 
         kwh = 3_600_000.0
         return {
@@ -263,6 +291,8 @@ class DataLogger:
             "consumption": consumption / kwh,
             "battery_charge": charge / kwh,
             "battery_discharge": discharge / kwh,
+            "grid_import": grid_import / kwh,
+            "grid_export": grid_export / kwh,
             "samples": len(rows),
             "intervals": intervals,
         }

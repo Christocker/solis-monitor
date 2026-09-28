@@ -33,7 +33,6 @@ function updateStatusBanner(snapshot) {
     const banner = document.getElementById("status-banner");
     const pill = banner.querySelector(".status-pill");
     const gridPill = document.getElementById("grid-status-pill");
-    const gridStatusText = document.getElementById("grid-status-text");
 
     const online = snapshot.system && snapshot.system.online;
 
@@ -53,15 +52,12 @@ function updateStatusBanner(snapshot) {
     if (connected === true) {
         gridPill.className = "status-pill pill-ok";
         gridPill.innerHTML = '<span class="dot dot-ok"></span> GRID CONNECTED';
-        if (gridStatusText) gridStatusText.textContent = "Grid Connected";
     } else if (connected === false) {
         gridPill.className = "status-pill pill-warn";
         gridPill.innerHTML = '<span class="dot dot-warn"></span> GRID DISCONNECTED';
-        if (gridStatusText) gridStatusText.textContent = "Grid Disconnected";
     } else {
         gridPill.className = "status-pill pill-muted";
         gridPill.innerHTML = '<span class="dot dot-waiting"></span> GRID --';
-        if (gridStatusText) gridStatusText.textContent = "Grid --";
     }
 
     // DEMO badge (topbar)
@@ -107,7 +103,9 @@ function updateBattery(b) {
 }
 
 function updateGrid(g) {
-    setValue("grid-power", renderField(g.power, 0));
+    const p = (g.power && g.power.state === "available" && g.power.value != null)
+        ? Number(g.power.value) : null;
+    setValue("grid-power", p === null ? NORMAL_DASH : Math.abs(p).toFixed(0));
     setValue("grid-voltage", renderField(g.voltage, 1));
     setValue("grid-frequency", renderField(g.frequency, 2));
     const connEl = document.getElementById("grid-connection");
@@ -116,24 +114,23 @@ function updateGrid(g) {
         else if (g.connected === false) connEl.textContent = "Disconnected";
         else connEl.textContent = NORMAL_DASH;
     }
+    // Big label under the value: import/export direction (derived estimate).
+    const label = document.getElementById("grid-status-text");
+    if (label) {
+        if (g.connected === false) label.textContent = "Grid Disconnected";
+        else if (p === null) label.textContent = "Grid Connected";
+        else if (p > 0) label.textContent = "Import from grid (est.)";
+        else if (p < 0) label.textContent = "Export to grid (est.)";
+        else label.textContent = "Balanced (est.)";
+    }
 }
 
 function updateLoad(l, snapshot) {
     setValue("load-power", renderField(l.power, 0));
     setValue("house-load", renderField(l.house_load, 0));
     setValue("backup-load", renderField(l.backup_power, 0));
-    // Show which port the load is being read from
     const source = document.getElementById("load-source");
-    if (source) {
-        const gridConn = snapshot && snapshot.grid && snapshot.grid.connected;
-        if (gridConn === false) {
-            source.textContent = "Load Power (Backup port)";
-        } else if (gridConn === true) {
-            source.textContent = "Load Power (Grid port)";
-        } else {
-            source.textContent = "Load Power";
-        }
-    }
+    if (source) source.textContent = "Total Load (House + Backup)";
 }
 
 function updateEnergy(e) {

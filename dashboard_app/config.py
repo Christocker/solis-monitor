@@ -37,6 +37,12 @@ DISCOVERY_INTERVAL = float(os.environ.get("SOLIS_DISCOVERY_INTERVAL", "300"))  #
 # Grid is considered connected when grid voltage is above this threshold (V)
 GRID_CONNECTED_THRESHOLD_V = 50.0
 
+# Grid power is derived from the energy balance (no dedicated grid meter):
+#   grid = load - pv - battery   (+battery = discharging)
+# Positive = importing, negative = exporting. |value| below this is treated as
+# zero to hide register rounding/measurement noise.
+GRID_POWER_DEADBAND_W = float(os.environ.get("GRID_POWER_DEADBAND_W", "50"))
+
 # Grid CO2 intensity used for the "CO2 avoided" estimate (kg CO2e per kWh).
 # Default ~0.7 (typical grid); override with CO2_KG_PER_KWH.
 CO2_KG_PER_KWH = float(os.environ.get("CO2_KG_PER_KWH", "0.7"))

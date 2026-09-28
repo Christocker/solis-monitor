@@ -13,7 +13,9 @@ The GUI (Layer 4) and API (Layer 3) consume ONLY this normalized shape.
 
 import time
 
-from .config import GRID_CONNECTED_THRESHOLD_V, DEMO_MODE
+from .config import (
+    GRID_CONNECTED_THRESHOLD_V, GRID_POWER_DEADBAND_W, DEMO_MODE,
+)
 from . import registers as regmap
 
 
@@ -115,6 +117,19 @@ def _unavailable_field(name, unit=""):
     }
 
 
+def _derived_field(name, value, unit=""):
+    """A value computed from other verified fields (not its own register)."""
+    return {
+        "name": name,
+        "value": value,
+        "state": AVAILABLE if value is not None else UNAVAILABLE,
+        "unit": unit,
+        "address": None,
+        "function": None,
+        "derived": True,
+    }
+
+
 def build_snapshot(raw, errors, identification):
     """
     Build the complete normalized snapshot.
@@ -167,10 +182,8 @@ def build_snapshot(raw, errors, identification):
     }
 
     # ---------------- Grid ----------------
-    # NOTE: register 33079 "ac_power" is the inverter's TOTAL AC output
-    # power, NOT grid import/export. It is NOT shown as grid power.
-    # Grid power stays unavailable until we verify a dedicated grid
-    # import/export register.
+    # There is no dedicated grid import/export meter. Grid power is derived
+    # from the energy balance below (see "Grid power (derived)").
     grid = {
         "voltage": field("grid_voltage"),
         "frequency": field("grid_frequency"),
@@ -184,17 +197,47 @@ def build_snapshot(raw, errors, identification):
     )
 
     # ---------------- Load ----------------
-    # The S6-EH1P reports load on different registers depending on mode:
-    #   - On-grid:  house_load (33147) = consumption through the grid port
-    #   - Off-grid: backup_load (33148) = consumption on the backup output
-    # The dashboard's "Load Power" shows the value matching the current mode.
+    # Registers 33147 (house) and 33148 (backup) are two output ports. On this
+    # installation 33147 is almost always 0 and 33148 carries the real load in
+    # BOTH grid states, so the total consumption is their sum.
     house_f = field("house_load")
     backup_f = field("backup_load")
+
+    def _usable(f):
+        return f.get("state") == AVAILABLE and f.get("value") is not None
+
+    house_v = house_f["value"] if _usable(house_f) else None
+    backup_v = backup_f["value"] if _usable(backup_f) else None
+    if house_v is None and backup_v is None:
+        load_f = _unavailable_field("Load Power", "W")
+    else:
+        load_f = _derived_field(
+            "Load Power", round((house_v or 0.0) + (backup_v or 0.0), 3), "W"
+        )
     load = {
-        "power": backup_f if grid["connected"] is False else house_f,
+        "power": load_f,
         "house_load": house_f,
         "backup_power": backup_f,
     }
+
+    # ---------------- Grid power (derived) ----------------
+    # No grid meter: derive it from the balance of the measured powers
+    #   grid = load - pv - battery   (battery positive = discharging)
+    # positive = importing from the grid, negative = exporting to the grid.
+    # Only shown while the grid is connected and every input is known.
+    load_v = load_f["value"] if _usable(load_f) else None
+    pv_f = solar["power"]
+    batt_f = battery["power"]
+    pv_v = pv_f["value"] if _usable(pv_f) else None
+    batt_v = batt_f["value"] if _usable(batt_f) else None
+    dir_ok = _usable(bat_dir)     # battery sign trustworthy only if 33135 read
+    if (grid["connected"] is True
+            and load_v is not None and pv_v is not None and batt_v is not None
+            and (batt_v == 0 or dir_ok)):
+        grid_w = load_v - pv_v - batt_v
+        if abs(grid_w) < GRID_POWER_DEADBAND_W:
+            grid_w = 0.0
+        grid["power"] = _derived_field("Grid Power", round(grid_w, 1), "W")
 
     # ---------------- Energy (no verified registers yet) ----------------
     energy = {
