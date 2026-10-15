@@ -22,6 +22,10 @@ import time
 
 import requests
 
+# One keep-alive session for every Supabase call (avoids a TLS handshake
+# per 2-second upload).
+_SESSION = requests.Session()
+
 from .config import CONFIG
 from . import normalize
 
@@ -86,7 +90,7 @@ def supabase_post(table, payload, url, key):
         "Content-Type": "application/json",
         "Prefer": "return=minimal",
     }
-    resp = requests.post(
+    resp = _SESSION.post(
         f"{url}/rest/v1/{table}", headers=headers,
         data=json.dumps(payload), timeout=10,
     )
@@ -145,7 +149,7 @@ def supabase_upsert(table, rows, url, key, on_conflict=None):
     endpoint = f"{url}/rest/v1/{table}"
     if on_conflict:
         endpoint += f"?on_conflict={on_conflict}"
-    resp = requests.post(endpoint, headers=headers, data=json.dumps(rows), timeout=10)
+    resp = _SESSION.post(endpoint, headers=headers, data=json.dumps(rows), timeout=10)
     resp.raise_for_status()
     return resp
 
@@ -170,6 +174,7 @@ class CloudSyncer:
         self._last_error = None
         self._last_heartbeat = 0.0
         self._last_energy = 0.0
+        self._error_printed = 0
 
     @property
     def configured(self):
@@ -215,6 +220,8 @@ class CloudSyncer:
                 "error_count": self._errors,
                 "active_alerts": self._active_alerts(),
             }], self._url, self._key, on_conflict="id")
+            if self._last_ok is None:
+                self._last_ok = time.time()
         except requests.RequestException:
             pass          # heartbeat is best-effort
 
@@ -284,19 +291,28 @@ class CloudSyncer:
                     "%Y-%m-%d %H:%M:%S", time.localtime(row["ts_unix"])
                 )
 
-                supabase_post("readings", [row], self._url, self._key)
-                self._last_ok = row["ts_unix"]
-                self._errors = 0
-                self._last_error = None
+                # Inverter offline -> every field is None. Don't push junk
+                # rows (the website reads the newest row's age for liveness).
+                if any(v is not None for v in row.values()):
+                    supabase_post("readings", [row], self._url, self._key)
+                    self._last_ok = time.time()
+                    self._errors = 0
+                    self._error_printed = 0
+                    self._last_error = None
 
             except requests.RequestException as exc:
                 self._errors += 1
                 self._last_error = str(exc)
-                print(f"  ! cloud sync upload failed: {exc}")
+                self._error_printed += 1
+                if self._error_printed <= 1 or self._error_printed % 30 == 0:
+                    print(f"  ! cloud sync upload failed ({self._error_printed}): {exc}")
             except Exception as exc:
                 self._errors += 1
                 self._last_error = str(exc)
-                print(f"  ! cloud sync error: {type(exc).__name__}: {exc}")
+                self._error_printed += 1
+                if self._error_printed <= 1 or self._error_printed % 30 == 0:
+                    print(f"  ! cloud sync error ({self._error_printed}): "
+                          f"{type(exc).__name__}: {exc}")
 
             self._maybe_heartbeat()
             self._maybe_energy()

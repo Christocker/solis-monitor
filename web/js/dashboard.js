@@ -273,7 +273,7 @@ async function getSystemInfo() {
 let _syncStatus = null;
 let _syncFetched = 0;
 async function getSyncStatus() {
-    if (_syncStatus && Date.now() - _syncFetched < 60000) return _syncStatus;
+    if (Date.now() - _syncFetched < 60000) return _syncStatus;
     const s = await fetchSyncStatus();
     if (s) _syncStatus = s;
     _syncFetched = Date.now();

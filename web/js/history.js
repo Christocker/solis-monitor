@@ -36,7 +36,7 @@ function baseOptions(yTitle) {
             legend: { display: false },
             tooltip: {
                 backgroundColor: COLORS.tooltipBg, titleColor: COLORS.text,
-                bodyColor: "#3a3a3c", borderColor: "rgba(0,0,0,0.1)",
+                bodyColor: COLORS.text, borderColor: COLORS.gridLine,
                 borderWidth: 1, cornerRadius: 10, padding: 10,
                 displayColors: false,
                 callbacks: {
@@ -373,6 +373,12 @@ function clearCharts() {
         chart.update();
     }
     for (const def of STAT_DEFS) setText(def.id, NORMAL_DASH);
+    const ov = charts["chart-overview"];
+    if (ov) {
+        ov.data.labels = [];
+        ov.data.datasets.forEach((d) => { d.data = []; });
+        ov.update();
+    }
 }
 
 function renderCharts(rows, view) {
@@ -444,6 +450,7 @@ async function loadHistory() {
         statusEl.textContent = rows.length + (view.raw ? " samples" : " buckets");
     } catch (err) {
         if (token !== loadToken) return;
+        clearCharts();
         if (err && err.rpcUnavailable) {
             statusEl.textContent =
                 "Full history needs supabase/schema.sql (history_buckets)";
@@ -470,7 +477,8 @@ function readStateFromURL() {
         const view = p.get("view");
         if (view && VIEWS[view]) currentView = view;
         const t = p.get("t");
-        anchorUnix = (t && !isNaN(Number(t))) ? Number(t) : null;
+        const n = Number(t);
+        anchorUnix = (t && !isNaN(n) && n < Date.now() / 1000) ? n : null;
     } catch (e) { /* ignore */ }
 }
 
@@ -620,6 +628,7 @@ function updateTimeNav(rng) {
     if (nowBtn) {
         nowBtn.classList.toggle("active", live);
         nowBtn.disabled = isAll;
+        nowBtn.setAttribute("aria-pressed", live ? "true" : "false");
     }
     if (label) {
         if (isAll) {

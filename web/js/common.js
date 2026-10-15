@@ -322,13 +322,14 @@ function computeEnergy(rows) {
     let gridImport = 0, gridExport = 0;
     let prev = null;
     for (const r of rows) {
-        const load = (r.house_load || 0) + (r.backup_load || 0);
+        // null when both ports are missing — never fabricate a 0 W load.
+        const load = totalLoad(r);
         if (prev) {
             const dt = r.ts_unix - prev.ts;
             if (dt > 0 && dt <= maxGap) {
                 if (prev.pv != null && r.pv_power != null)
                     solar += (prev.pv + r.pv_power) / 2 * dt;
-                if (prev.load != null)
+                if (prev.load != null && load != null)
                     consumption += (prev.load + load) / 2 * dt;
                 if (prev.batt != null && r.battery_power != null) {
                     const e = (prev.batt + r.battery_power) / 2 * dt;
@@ -338,10 +339,11 @@ function computeEnergy(rows) {
                 if (r.ts_unix >= GRID_ENERGY_VALID_FROM
                         && prev.ts >= GRID_ENERGY_VALID_FROM
                         && prev.gv != null && r.grid_voltage != null
-                        && prev.gv >= GRID_CONNECTED_V && r.grid_voltage >= GRID_CONNECTED_V
+                        && (prev.gv >= GRID_CONNECTED_V || prev.gvSeconds > 0)
+                        && (r.grid_voltage >= GRID_CONNECTED_V || r.grid_seconds > 0)
                         && prev.pv != null && r.pv_power != null
                         && prev.batt != null && r.battery_power != null
-                        && prev.load != null) {
+                        && prev.load != null && load != null) {
                     const gPrev = prev.load - prev.pv - prev.batt;
                     const gNow = load - r.pv_power - r.battery_power;
                     const e = (gPrev + gNow) / 2 * dt;
@@ -350,7 +352,8 @@ function computeEnergy(rows) {
             }
         }
         prev = { ts: r.ts_unix, pv: r.pv_power, batt: r.battery_power,
-                 load: load, gv: r.grid_voltage };
+                 load: load, gv: r.grid_voltage,
+                 gvSeconds: r.grid_seconds };
     }
     const kwh = 3.6e6;
     const field = (v) => ({

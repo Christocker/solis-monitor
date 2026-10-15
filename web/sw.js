@@ -1,18 +1,30 @@
-/* Solis Monitor service worker — installable app + offline last-known data. */
-const CACHE = "solis-v1";
+/* Solis Monitor service worker — installable app + offline last-known data.
+   Keep VERSION in lockstep with the ?v= query string in the HTML pages so a
+   deploy that changes JS/CSS without touching sw.js still refreshes. */
+const VERSION = "20261015a";
+const CACHE = "solis-" + VERSION;
 const SHELL = [
-    "./", "./index.html", "./history.html", "./system.html",
-    "./css/style.css", "./config.js",
-    "./js/common.js", "./js/dashboard.js", "./js/history.js", "./js/system.js",
-    "./js/chart.umd.min.js", "./fonts/inter.woff2",
-    "./icons/icon-192.png", "./icons/icon-512.png",
+    "./", "./index.html", "./history", "./history.html",
+    "./system", "./system.html",
+    "./css/style.css?v=" + VERSION,
+    "./config.js?v=" + VERSION,
+    "./js/common.js?v=" + VERSION,
+    "./js/dashboard.js?v=" + VERSION,
+    "./js/history.js?v=" + VERSION,
+    "./js/system.js?v=" + VERSION,
+    "./js/chart.umd.min.js?v=" + VERSION,
+    "./fonts/inter.woff2",
+    "./icons/icon-192.png",
+    "./icons/icon-512.png",
+    "./icons/icon-512-maskable.png",
     "./manifest.webmanifest",
 ];
 
 self.addEventListener("install", (e) => {
     e.waitUntil(
         caches.open(CACHE)
-            .then((c) => c.addAll(SHELL))
+            .then((c) => Promise.all(SHELL.map((u) =>
+                c.add(u).catch(() => {}))))
             .then(() => self.skipWaiting())
     );
 });
@@ -26,6 +38,14 @@ self.addEventListener("activate", (e) => {
     );
 });
 
+function putIfOk(req, res) {
+    if (res && res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+    }
+    return res;
+}
+
 self.addEventListener("fetch", (e) => {
     const req = e.request;
     if (req.method !== "GET") return;
@@ -34,20 +54,14 @@ self.addEventListener("fetch", (e) => {
     if (url.origin === location.origin) {
         // App shell: network-first, fall back to the cached copy offline.
         e.respondWith(
-            fetch(req).then((res) => {
-                const copy = res.clone();
-                caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-                return res;
-            }).catch(() => caches.match(req, { ignoreSearch: true }))
+            fetch(req).then((res) => putIfOk(req, res))
+                .catch(() => caches.match(req, { ignoreSearch: true }))
         );
-    } else if (url.hostname.endsWith("supabase.co")) {
+    } else if (url.hostname.endsWith(".supabase.co")) {
         // Data: network-first, fall back to the last cached response offline.
         e.respondWith(
-            fetch(req).then((res) => {
-                const copy = res.clone();
-                caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-                return res;
-            }).catch(() => caches.match(req))
+            fetch(req).then((res) => putIfOk(req, res))
+                .catch(() => caches.match(req))
         );
     }
 });

@@ -113,6 +113,7 @@
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
@@ -1063,6 +1064,7 @@ body {
     }
 }
 .nav-btn:disabled { opacity: 0.4; cursor: default; }
+.nav-btn.active { background: var(--surface-pressed); color: var(--text); }
 .nav-btn.latest {
     width: auto;
     padding: 0 14px;
@@ -1279,3 +1281,9 @@ body {
 .alert-chip.critical { background: rgba(255, 59, 48, 0.15); color: #b3261e; }
 :root[data-theme="dark"] .alert-chip.warning { background: rgba(255, 196, 77, 0.18); color: #ffd08a; }
 :root[data-theme="dark"] .alert-chip.critical { background: rgba(255, 90, 82, 0.18); color: #ff9a94; }
+
+/* Dark-mode contrast for the green status text */
+:root[data-theme="dark"] .status-tag.available,
+:root[data-theme="dark"] .flow-node-soc,
+:root[data-theme="dark"] .stat-co2 .stat-value { color: #7ee2a0; }
+:root[data-theme="dark"] .pill-ok { color: #7ee2a0; }

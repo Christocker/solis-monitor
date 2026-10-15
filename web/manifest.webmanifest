@@ -2,7 +2,7 @@
   "name": "Solis Monitor",
   "short_name": "Solis",
   "description": "Live solar, battery and grid monitoring for the Solis S6 hybrid inverter.",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "background_color": "#0b0b0d",

@@ -140,7 +140,7 @@ Pages:
 ## Data Logger (SQLite)
 
 While the dashboard is running, a background thread records every poll
-(one row per 3 seconds) to **`solis_history.db`** (SQLite, no extra
+(one row per 2 seconds) to **`solis_history.db`** (SQLite, no extra
 dependencies, built into Python). This gives you a usable historical
 record starting immediately, without waiting for the full Phase 4
 database work.
@@ -214,23 +214,18 @@ Layer 1  Modbus ......... dashboard_app/modbus_layer.py (pymodbus poller)
 - Layer 3 exposes `GET /api/status`, `GET /api/diagnostics`, `GET /api/config`,
   and `GET /api/history`.
 - The data logger (Layer 2 companion) writes each snapshot to SQLite.
-- The GUI polls `/api/status` every 3 seconds and re-renders in place.
+- The GUI polls `/api/status` every 2 seconds and re-renders in place.
 
 **No fabricated values.** Unverified registers render as `--`. Grid
 disconnection is a normal state, not an error.
 
-## Load Power (mode-dependent)
+## Load Power (total)
 
-The S6-EH1P reports load on different registers depending on how the
-system is operating:
-
-- **On-grid:** `house_load` (33147) = consumption through the grid port
-- **Off-grid (backup):** `backup_load` (33148) = consumption on the backup output
-
-The dashboard's **Load Power** automatically shows the value matching the
-current mode (the big number on the Load card). The two individual values
-are always shown beneath it so you can see both. When off-grid, the Load
-card label reads "Load Power (Backup port)".
+Registers 33147 (`house_load`) and 33148 (`backup_load`) are two output
+ports. On this installation 33147 is almost always 0 and 33148 carries the
+load in **both** grid states, so the dashboard's **Load Power** is their sum
+(labelled "Total Load (House + Backup)"), with the two individual values
+shown beneath it.
 
 ## Energy Flow Diagram
 

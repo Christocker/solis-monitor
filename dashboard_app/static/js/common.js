@@ -24,9 +24,9 @@ function renderValue(value, decimals) {
 }
 
 // Fetch JSON with a timeout.
-async function fetchJSON(url) {
+async function fetchJSON(url, timeoutMs) {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 5000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs || 5000);
     try {
         const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) throw new Error("HTTP " + res.status);
@@ -42,7 +42,7 @@ async function fetchReadings(startUnix, endUnix, limit) {
     let url = "/api/history?limit=" + (limit || 10000);
     if (startUnix) url += "&start=" + startUnix;
     if (endUnix) url += "&end=" + endUnix;
-    const data = await fetchJSON(url);
+    const data = await fetchJSON(url, 15000);
     const rows = (data && data.rows) || [];
     rows.sort((a, b) => a.ts_unix - b.ts_unix);
     return rows;
@@ -56,7 +56,7 @@ async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     if (startUnix != null) params.set("start", startUnix);
     if (endUnix != null) params.set("end", endUnix);
     if (onProgress) onProgress(1, 1);   // single local request
-    const data = await fetchJSON("/api/history/buckets?" + params.toString());
+    const data = await fetchJSON("/api/history/buckets?" + params.toString(), 40000);
     const rows = (data && data.rows) || [];
     rows.sort((a, b) => a.ts_unix - b.ts_unix);
     return rows;

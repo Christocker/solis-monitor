@@ -226,6 +226,11 @@ class DataLogger:
         never fabricates energy.
         """
         conn = self._connect()
+        solar = consumption = charge = discharge = 0.0
+        grid_import = grid_export = 0.0
+        prev = None
+        intervals = 0
+        samples = 0
         try:
             cur = conn.execute(
                 "SELECT ts_unix, pv_power, battery_power, house_load, "
@@ -234,56 +239,58 @@ class DataLogger:
                 "ORDER BY ts_unix ASC",
                 (start_unix, end_unix),
             )
-            rows = cur.fetchall()
+            # Stream the cursor (do not fetchall): history can be millions of
+            # rows and materialising it all spikes memory.
+            for ts, pv, batt, house, backup, gv in cur:
+                samples += 1
+                load = None
+                if house is not None or backup is not None:
+                    load = (house or 0.0) + (backup or 0.0)
+                if prev is not None:
+                    dt = ts - prev[0]
+                    if 0 < dt <= max_gap:
+                        used = False
+                        if prev[1] is not None and pv is not None:
+                            solar += (prev[1] + pv) / 2.0 * dt
+                            used = True
+                        # Battery charge/discharge split is only trustworthy
+                        # from GRID_ENERGY_VALID_FROM (the direction-register
+                        # fix); before that the magnitude sign was wrong.
+                        if (ts >= GRID_ENERGY_VALID_FROM
+                                and prev[0] >= GRID_ENERGY_VALID_FROM
+                                and prev[2] is not None and batt is not None):
+                            e = (prev[2] + batt) / 2.0 * dt
+                            if e > 0:
+                                discharge += e
+                            else:
+                                charge += -e
+                            used = True
+                        if prev[3] is not None and load is not None:
+                            consumption += (prev[3] + load) / 2.0 * dt
+                            used = True
+                        # Derived grid import/export (both endpoints must be
+                        # post-fix and grid-connected).
+                        if (ts >= GRID_ENERGY_VALID_FROM
+                                and prev[0] >= GRID_ENERGY_VALID_FROM
+                                and gv is not None and prev[4] is not None
+                                and gv >= GRID_CONNECTED_THRESHOLD_V
+                                and prev[4] >= GRID_CONNECTED_THRESHOLD_V
+                                and prev[1] is not None and pv is not None
+                                and prev[2] is not None and batt is not None
+                                and prev[3] is not None and load is not None):
+                            g_prev = prev[3] - prev[1] - prev[2]
+                            g_now = load - pv - batt
+                            e = (g_prev + g_now) / 2.0 * dt
+                            if e >= 0:
+                                grid_import += e
+                            else:
+                                grid_export += -e
+                            used = True
+                        if used:
+                            intervals += 1
+                prev = (ts, pv, batt, load, gv)
         finally:
             conn.close()
-
-        solar = consumption = charge = discharge = 0.0
-        grid_import = grid_export = 0.0
-        prev = None
-        intervals = 0
-        for ts, pv, batt, house, backup, gv in rows:
-            load = None
-            if house is not None or backup is not None:
-                load = (house or 0.0) + (backup or 0.0)
-            if prev is not None:
-                dt = ts - prev[0]
-                if 0 < dt <= max_gap:
-                    used = False
-                    if prev[1] is not None and pv is not None:
-                        solar += (prev[1] + pv) / 2.0 * dt
-                        used = True
-                    if prev[2] is not None and batt is not None:
-                        e = (prev[2] + batt) / 2.0 * dt
-                        if e > 0:
-                            discharge += e
-                        else:
-                            charge += -e
-                        used = True
-                    if prev[3] is not None and load is not None:
-                        consumption += (prev[3] + load) / 2.0 * dt
-                        used = True
-                    # Derived grid import/export (only once the battery sign is
-                    # trustworthy and both endpoints are grid-connected).
-                    if (ts >= GRID_ENERGY_VALID_FROM
-                            and prev[0] >= GRID_ENERGY_VALID_FROM
-                            and gv is not None and prev[4] is not None
-                            and gv >= GRID_CONNECTED_THRESHOLD_V
-                            and prev[4] >= GRID_CONNECTED_THRESHOLD_V
-                            and prev[1] is not None and pv is not None
-                            and prev[2] is not None and batt is not None
-                            and prev[3] is not None and load is not None):
-                        g_prev = prev[3] - prev[1] - prev[2]
-                        g_now = load - pv - batt
-                        e = (g_prev + g_now) / 2.0 * dt
-                        if e >= 0:
-                            grid_import += e
-                        else:
-                            grid_export += -e
-                        used = True
-                    if used:
-                        intervals += 1
-            prev = (ts, pv, batt, load, gv)
 
         kwh = 3_600_000.0
         return {
@@ -293,7 +300,7 @@ class DataLogger:
             "battery_discharge": discharge / kwh,
             "grid_import": grid_import / kwh,
             "grid_export": grid_export / kwh,
-            "samples": len(rows),
+            "samples": samples,
             "intervals": intervals,
         }
 

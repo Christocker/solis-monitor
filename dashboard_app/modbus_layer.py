@@ -17,7 +17,7 @@ Layers above consume the result of get_raw_snapshot().
 import socket
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pymodbus.client import ModbusTcpClient
 from pymodbus.exceptions import ModbusException, ConnectionException
@@ -89,27 +89,42 @@ class ModbusReader:
                     pass
             except OSError:
                 return None
+            cli = None
             try:
                 cli = ModbusTcpClient(ip, port=port, timeout=1.5)
                 if cli.connect():
                     res = cli.read_input_registers(
                         address=33049, count=1, device_id=slave
                     )
-                    cli.close()
                     if not res.isError():
                         return ip
             except Exception:
                 pass
+            finally:
+                if cli is not None:
+                    try:
+                        cli.close()
+                    except Exception:
+                        pass
             return None
 
         ips = [f"{subnet}.{i}" for i in range(1, 255)]
+        # Return as soon as a match is found instead of waiting for all 253
+        # probes (ThreadPoolExecutor.map's shutdown waits for everything).
+        pool = ThreadPoolExecutor(max_workers=64)
         try:
-            with ThreadPoolExecutor(max_workers=64) as pool:
-                for found in pool.map(probe, ips):
-                    if found:
-                        return found
-        except Exception:
-            return None
+            futures = [pool.submit(probe, ip) for ip in ips]
+            for fut in as_completed(futures):
+                try:
+                    found = fut.result()
+                except Exception:
+                    found = None
+                if found:
+                    for f in futures:
+                        f.cancel()
+                    return found
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
         return None
 
     def _get_client(self):
@@ -262,6 +277,7 @@ class ModbusReader:
                 self._stats["last_error_time"] = time.time()
                 self._stats["last_error_message"] = f"identification: {exc}"
 
+        cycles = 0
         while not self._stop_event.is_set():
             try:
                 raw, errors = self.read_cycle()
@@ -270,6 +286,16 @@ class ModbusReader:
                     self._errors = errors
                     if any(v is not None for v in raw.values()):
                         self._stats["last_success_time"] = time.time()
+                # Identification is read once at start; if the logger was not
+                # ready then, retry every ~30 s until the serial is known.
+                cycles += 1
+                if cycles % 15 == 0:
+                    ident = getattr(self, "_identification", None) or {}
+                    if self.connected and not ident.get("serial_number"):
+                        ident = self.read_identification()
+                        if ident.get("serial_number"):
+                            with self._lock:
+                                self._identification = ident
             except Exception as exc:
                 with self._lock:
                     self._stats["last_error_time"] = time.time()

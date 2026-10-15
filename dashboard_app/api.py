@@ -11,6 +11,7 @@ via Layer 2 normalization.
 """
 
 import math
+import threading
 import time
 
 from flask import jsonify, render_template, request
@@ -92,37 +93,76 @@ def _co2_field(name, kwh):
     }
 
 
-def _lifetime_energy_fields():
-    """Lifetime energy totals, integrated from every recorded reading (cached)."""
+def _lifetime_placeholders():
+    return {
+        "lifetime_solar": _energy_field("Lifetime Solar Generation", None),
+        "lifetime_consumption": _energy_field("Lifetime Consumption", None),
+        "lifetime_battery_charge": _energy_field("Lifetime Battery Charged", None),
+        "lifetime_battery_discharge": _energy_field("Lifetime Battery Discharged", None),
+        "co2_avoided": _co2_field("CO2 Avoided", None),
+        "first_record": None,
+    }
+
+
+def _compute_lifetime_fields():
+    """Integrate the whole recording once (returns None if there is no data)."""
     now = time.time()
-    if (_lifetime_cache["fields"] is not None
-            and now - _lifetime_cache["t"] < _LIFETIME_CACHE_SECONDS):
-        return _lifetime_cache["fields"]
     first, _last = data_logger.logger.min_max_time()
-    summary = {}
-    if first is not None:
-        try:
-            summary = data_logger.logger.energy_summary(first, now)
-        except Exception:
-            summary = {}
-    has = bool(summary.get("intervals"))
-    val = lambda key: (summary.get(key) if has else None)
-    fields = {
-        "lifetime_solar": _energy_field("Lifetime Solar Generation", val("solar")),
-        "lifetime_consumption": _energy_field("Lifetime Consumption", val("consumption")),
+    if first is None:
+        return None
+    summary = data_logger.logger.energy_summary(first, now)
+    if not summary.get("intervals"):
+        return None
+    return {
+        "lifetime_solar": _energy_field("Lifetime Solar Generation", summary.get("solar")),
+        "lifetime_consumption": _energy_field("Lifetime Consumption", summary.get("consumption")),
         "lifetime_battery_charge": _energy_field("Lifetime Battery Charged",
-                                                 val("battery_charge")),
+                                                 summary.get("battery_charge")),
         "lifetime_battery_discharge": _energy_field("Lifetime Battery Discharged",
-                                                    val("battery_discharge")),
-        "co2_avoided": _co2_field("CO2 Avoided", val("solar")),
+                                                    summary.get("battery_discharge")),
+        "co2_avoided": _co2_field("CO2 Avoided", summary.get("solar")),
         "first_record": first,
     }
-    # Only cache a successful computation; a transient failure must retry on
-    # the next request instead of showing "—" for the whole TTL.
-    if has:
-        _lifetime_cache["t"] = now
-        _lifetime_cache["fields"] = fields
-    return fields
+
+
+def _lifetime_energy_fields():
+    """Serve the last computed lifetime totals (never block on the scan)."""
+    return _lifetime_cache["fields"] or _lifetime_placeholders()
+
+
+def _lifetime_loop():
+    while True:
+        try:
+            fields = _compute_lifetime_fields()
+            if fields:
+                _lifetime_cache["t"] = time.time()
+                _lifetime_cache["fields"] = fields
+        except Exception as exc:
+            print(f"[lifetime] error: {type(exc).__name__}: {exc}")
+        time.sleep(_LIFETIME_CACHE_SECONDS)
+
+
+def start_lifetime_worker():
+    threading.Thread(target=_lifetime_loop, daemon=True, name="lifetime").start()
+
+
+# --- Short-lived cache for the (expensive) bucket aggregation ---
+_BUCKETS_TTL = 30.0
+_buckets_cache = {}
+
+
+def _cached_buckets(start, end, buckets):
+    key = (start, end, buckets)
+    now = time.time()
+    ent = _buckets_cache.get(key)
+    if ent and now - ent[0] < _BUCKETS_TTL:
+        return ent[1]
+    rows = data_logger.logger.query_buckets(start, end, buckets)
+    _buckets_cache[key] = (now, rows)
+    if len(_buckets_cache) > 16:
+        oldest = min(_buckets_cache, key=lambda k: _buckets_cache[k][0])
+        _buckets_cache.pop(oldest, None)
+    return rows
 
 
 def _current_snapshot():
@@ -211,7 +251,7 @@ def create_app():
         if isinstance(e, HTTPException):
             return jsonify({"error": e.name}), (e.code or 500)
         app.logger.exception("unhandled error")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "internal server error"}), 500
 
     @app.route("/")
     def dashboard():
@@ -343,7 +383,7 @@ def create_app():
             return jsonify({"error": "end must be a finite number"}), 400
         if start is not None and end is not None and start > end:
             return jsonify({"error": "start must be <= end"}), 400
-        rows = data_logger.logger.query_buckets(start, end, buckets)
+        rows = _cached_buckets(start, end, buckets)
         return jsonify({"count": len(rows), "rows": rows})
 
     # Start the background poller and data logger when the app is created.
@@ -354,5 +394,6 @@ def create_app():
     if not DEMO_MODE:
         cloud_sync.start_syncer(modbus_layer.reader)
         alerts.start_alerts()
+        start_lifetime_worker()
 
     return app

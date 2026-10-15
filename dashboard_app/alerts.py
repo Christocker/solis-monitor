@@ -24,7 +24,6 @@ import requests
 
 from . import modbus_layer
 from . import normalize
-from .config import GRID_CONNECTED_THRESHOLD_V
 
 DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "alerts.db"
@@ -167,6 +166,10 @@ class AlertManager:
     def evaluate(self, conditions, detail, now=None):
         """Pure-ish transition engine (also used by tests)."""
         now = now if now is not None else time.time()
+        with self._lock:
+            self._evaluate_locked(conditions, detail, now)
+
+    def _evaluate_locked(self, conditions, detail, now):
         for key, _sev, _hold, _cd, _msg in RULES:
             if not ENABLED.get(key, True):
                 continue
