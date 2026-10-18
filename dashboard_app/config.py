@@ -50,6 +50,23 @@ CO2_KG_PER_KWH = float(os.environ.get("CO2_KG_PER_KWH", "0.7"))
 # A mature tree absorbs roughly this many kg CO2 per year (for the equivalent).
 CO2_KG_PER_TREE_YEAR = 21.0
 
+# --- Battery runtime estimate -------------------------------------------
+# The inverter reports battery SOC (%), not kWh, so a pack capacity is needed
+# to turn "state of charge" into "remaining energy". Leave BATTERY_CAPACITY_KWH
+# unset (or 0) to auto-detect it from the recorded charge/discharge history;
+# set it to a number to override the measurement.
+_cap_env = os.environ.get("BATTERY_CAPACITY_KWH", "").strip()
+BATTERY_CAPACITY_KWH = float(_cap_env) if _cap_env and float(_cap_env) > 0 else None
+
+# SOC (%) treated as the usable floor: runtime is counted down to this level,
+# not 0 %, because the inverter stops discharging at its own cutoff.
+BATTERY_RESERVE_SOC = float(os.environ.get("BATTERY_RESERVE_SOC", "10"))
+
+# Round-trip efficiency used to turn an AC load into battery draw when
+# estimating runtime (an AC load of 1000 W draws ~1000/efficiency W from the
+# pack). 0.93 is a typical hybrid-inverter figure; override if measured.
+INVERTER_EFFICIENCY = float(os.environ.get("INVERTER_EFFICIENCY", "0.93"))
+
 # Web server
 SERVER_HOST = "0.0.0.0"     # all interfaces so other devices on the LAN can connect
 SERVER_PORT = 8080

@@ -501,6 +501,49 @@ body {
 .soc-meta-row b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* ============================================================
+   Battery runtime estimate
+   ============================================================ */
+.runtime {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--hairline);
+}
+.runtime-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+.runtime-icon { display: inline-flex; width: 15px; height: 15px; color: var(--battery); }
+.runtime-icon svg { width: 15px; height: 15px; }
+.runtime-label { font-weight: 500; }
+.runtime-input {
+    width: 70px;
+    padding: 3px 7px;
+    font: inherit;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    background: var(--track);
+    border: 1px solid var(--hairline-strong);
+    border-radius: 7px;
+    text-align: right;
+}
+.runtime-input:focus-visible { outline: 2px solid var(--tint); outline-offset: 1px; }
+.runtime-unit { font-weight: 500; }
+.runtime-value {
+    font-family: var(--font-nums);
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-top: 5px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.runtime-note { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+/* ============================================================
    Panels (flow, stats, tables)
    ============================================================ */
 .panel {

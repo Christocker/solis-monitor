@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Dashboard — Solis Monitor</title>
-    <link rel="stylesheet" href="css/style.css?v=20261015a">
+    <link rel="stylesheet" href="css/style.css?v=20261015b">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -158,6 +158,7 @@
                     <div class="soc-meta">
                         <div class="soc-meta-row"><span class="dot dot-waiting" id="soc-dot"></span> State of Charge</div>
                         <div class="soc-meta-row"><span>Voltage</span> <b id="batt-voltage-meta">--</b> V</div>
+                        <div class="soc-meta-row"><span>Pack</span> <b id="batt-capacity">--</b> kWh</div>
                     </div>
                 </div>
                 <div class="card-grid">
@@ -165,6 +166,17 @@
                     <div class="mini"><span class="mini-label">Current</span><div><span class="mini-value" id="batt-current">--</span><span class="mini-unit">A</span></div></div>
                     <div class="mini"><span class="mini-label">Power</span><div><span class="mini-value" id="batt-power">--</span><span class="mini-unit">W</span></div></div>
                     <div class="mini"><span class="mini-label">Health</span><div><span class="mini-value" id="batt-soh">--</span><span class="mini-unit">%</span></div></div>
+                </div>
+                <div class="runtime">
+                    <div class="runtime-head">
+                        <span class="runtime-icon"><svg aria-hidden="true" focusable="false"><use href="#i-clock"/></svg></span>
+                        <label class="runtime-label" for="runtime-load">Time left at</label>
+                        <input id="runtime-load" class="runtime-input" type="number" inputmode="numeric"
+                               min="0" step="10" placeholder="--" aria-label="Assumed consumption in watts">
+                        <span class="runtime-unit">W</span>
+                    </div>
+                    <div class="runtime-value" id="batt-runtime">--</div>
+                    <div class="runtime-note" id="batt-runtime-note"></div>
                 </div>
             </section>
 
@@ -372,8 +384,8 @@
         <a href="system.html" class="tab-link" aria-label="System"><svg aria-hidden="true" focusable="false"><use href="#i-gear"/></svg><span>System</span></a>
     </nav>
 
-<script src="config.js?v=20261015a"></script>
-<script src="js/common.js?v=20261015a"></script>
-<script src="js/dashboard.js?v=20261015a"></script>
+<script src="config.js?v=20261015b"></script>
+<script src="js/common.js?v=20261015b"></script>
+<script src="js/dashboard.js?v=20261015b"></script>
 </body>
 </html>

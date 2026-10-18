@@ -375,6 +375,71 @@ class DataLogger:
         finally:
             conn.close()
 
+    def estimate_battery_capacity(self, max_gap=120.0, step_soc=2.0):
+        """Estimate the battery pack capacity (kWh) from recorded history.
+
+        The inverter reports SOC (%) and signed battery power (W), so the pack
+        size can be measured: accumulate the energy moved between SOC steps and
+        divide by the SOC change (no pack size needs to be known in advance).
+        Only post-fix data is used (the battery sign is trustworthy there).
+
+        Returns {"capacity_kwh", "samples", "soc_min", "soc_max"} or None when
+        there is not enough trustworthy data. The estimate is the median of the
+        per-segment ratios with an IQR outlier trim, so a few bad segments
+        cannot skew it.
+        """
+        import statistics
+        conn = self._connect()
+        ratios = []
+        seg_soc = None
+        seg_ts = 0.0
+        seg_ws = 0.0
+        prev = None
+        soc_min, soc_max = None, None
+        try:
+            cur = conn.execute(
+                "SELECT ts_unix, battery_soc, battery_power FROM readings "
+                "WHERE ts_unix >= ? AND battery_soc IS NOT NULL "
+                "AND battery_power IS NOT NULL ORDER BY ts_unix ASC",
+                (GRID_ENERGY_VALID_FROM,),
+            )
+            for ts, soc, power in cur:
+                soc_min = soc if soc_min is None else min(soc_min, soc)
+                soc_max = soc if soc_max is None else max(soc_max, soc)
+                if seg_soc is None:
+                    seg_soc, seg_ts, seg_ws = soc, ts, 0.0
+                    prev = (ts, power)
+                    continue
+                dt = ts - prev[0]
+                if dt <= 0 or dt > max_gap or (ts - seg_ts) > 12 * 3600:
+                    # real data gap or an over-long segment: restart cleanly
+                    seg_soc, seg_ts, seg_ws = soc, ts, 0.0
+                    prev = (ts, power)
+                    continue
+                seg_ws += (prev[1] + power) / 2.0 * dt      # watt-seconds
+                dsoc = soc - seg_soc
+                if abs(dsoc) >= step_soc:
+                    energy_wh = abs(seg_ws) / 3600.0
+                    ratios.append(energy_wh / (abs(dsoc) / 100.0) / 1000.0)
+                    seg_soc, seg_ts, seg_ws = soc, ts, 0.0
+                prev = (ts, power)
+        finally:
+            conn.close()
+
+        if len(ratios) < 5:
+            return None
+        ratios.sort()
+        n = len(ratios)
+        q1, q3 = ratios[n // 4], ratios[(3 * n) // 4]
+        iqr = q3 - q1
+        trimmed = [r for r in ratios if q1 - 1.5 * iqr <= r <= q3 + 1.5 * iqr] or ratios
+        return {
+            "capacity_kwh": round(statistics.median(trimmed), 3),
+            "samples": len(ratios),
+            "soc_min": soc_min,
+            "soc_max": soc_max,
+        }
+
     def min_max_time(self):
         """Return (first_ts, last_ts) recorded in the database, or None."""
         conn = self._connect()
@@ -433,6 +498,37 @@ def cols_schema():
 
 # Shared logger instance.
 logger = DataLogger()
+
+
+# Battery capacity (kWh) is measured from history (or set by BATTERY_CAPACITY_KWH)
+# and cached here because the scan touches every stored row (~3 s).
+_CAPACITY_CACHE = {"t": 0.0, "info": None}
+_CAPACITY_TTL = 1800.0
+
+
+def battery_capacity_info():
+    """Return cached {"capacity_kwh", "source", ...} or None if unknown.
+
+    A configured BATTERY_CAPACITY_KWH wins; otherwise the pack is measured from
+    the recorded charge/discharge history. The scan is cached ~30 min.
+    """
+    from .config import BATTERY_CAPACITY_KWH
+    if BATTERY_CAPACITY_KWH:
+        return {"capacity_kwh": round(float(BATTERY_CAPACITY_KWH), 3),
+                "source": "configured"}
+    now = time.time()
+    cached = _CAPACITY_CACHE
+    if cached["info"] is not None and now - cached["t"] < _CAPACITY_TTL:
+        return cached["info"]
+    try:
+        info = logger.estimate_battery_capacity()
+    except Exception:
+        info = None
+    if info:
+        info = {**info, "source": "measured"}
+        cached["info"] = info
+        cached["t"] = now
+    return info
 
 
 def start_logger():

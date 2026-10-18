@@ -20,6 +20,7 @@ from werkzeug.exceptions import HTTPException
 from .config import (
     DEMO_MODE, SERVER_HOST, SERVER_PORT, POLL_INTERVAL, CONFIG,
     CO2_KG_PER_KWH, CO2_KG_PER_TREE_YEAR,
+    BATTERY_RESERVE_SOC, INVERTER_EFFICIENCY,
 )
 from . import modbus_layer
 from . import normalize
@@ -130,6 +131,29 @@ def _lifetime_energy_fields():
     return _lifetime_cache["fields"] or _lifetime_placeholders()
 
 
+# --- Battery pack capacity (auto-detected from history; cached) ---
+_capacity_cache = {"t": 0.0, "info": None}
+
+
+def _compute_capacity_info():
+    """Return capacity info (env override or measured; cached by the logger)."""
+    return data_logger.battery_capacity_info()
+
+
+def _capacity_field():
+    info = _capacity_cache["info"]
+    if not info or info.get("capacity_kwh") is None:
+        return {"name": "Battery Capacity", "value": None,
+                "state": "unavailable", "unit": "kWh"}
+    field = {"name": "Battery Capacity", "value": info["capacity_kwh"],
+             "state": "available", "unit": "kWh",
+             "source": info.get("source")}
+    if info.get("soc_min") is not None:
+        field["soc_min"] = info["soc_min"]
+        field["soc_max"] = info["soc_max"]
+    return field
+
+
 def _lifetime_loop():
     while True:
         try:
@@ -137,6 +161,9 @@ def _lifetime_loop():
             if fields:
                 _lifetime_cache["t"] = time.time()
                 _lifetime_cache["fields"] = fields
+            info = _compute_capacity_info()
+            if info:
+                _capacity_cache["info"] = info
         except Exception as exc:
             print(f"[lifetime] error: {type(exc).__name__}: {exc}")
         time.sleep(_LIFETIME_CACHE_SECONDS)
@@ -218,6 +245,14 @@ def _current_snapshot():
     energy = _today_energy_fields()
     energy.update(_lifetime_energy_fields())
     snapshot["energy"] = energy
+    # Battery pack capacity (used for the runtime estimate) and the constants
+    # the client needs to turn SOC + a chosen load into "time left".
+    if isinstance(snapshot.get("battery"), dict):
+        snapshot["battery"]["capacity_kwh"] = _capacity_field()
+    snapshot["runtime"] = {
+        "reserve_soc": BATTERY_RESERVE_SOC,
+        "efficiency": INVERTER_EFFICIENCY,
+    }
     snapshot["alerts"] = alerts.active_alerts()
     return snapshot
 

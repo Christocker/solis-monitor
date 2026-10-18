@@ -62,6 +62,7 @@
             <div class="soc-meta">
                 <div class="soc-meta-row"><span class="dot dot-waiting" id="soc-dot"></span> State of Charge</div>
                 <div class="soc-meta-row"><span>Voltage</span> <b id="batt-voltage-meta">--</b> V</div>
+                <div class="soc-meta-row"><span>Pack</span> <b id="batt-capacity">--</b> kWh</div>
             </div>
         </div>
         <div class="card-grid">
@@ -69,6 +70,17 @@
             <div class="mini"><span class="mini-label">Current</span><div><span class="mini-value" id="batt-current">--</span><span class="mini-unit">A</span></div></div>
             <div class="mini"><span class="mini-label">Power</span><div><span class="mini-value" id="batt-power">--</span><span class="mini-unit">W</span></div></div>
             <div class="mini"><span class="mini-label">Health</span><div><span class="mini-value" id="batt-soh">--</span><span class="mini-unit">%</span></div></div>
+        </div>
+        <div class="runtime">
+            <div class="runtime-head">
+                <span class="runtime-icon"><svg aria-hidden="true" focusable="false"><use href="#i-clock"/></svg></span>
+                <label class="runtime-label" for="runtime-load">Time left at</label>
+                <input id="runtime-load" class="runtime-input" type="number" inputmode="numeric"
+                       min="0" step="10" placeholder="--" aria-label="Assumed consumption in watts">
+                <span class="runtime-unit">W</span>
+            </div>
+            <div class="runtime-value" id="batt-runtime">--</div>
+            <div class="runtime-note" id="batt-runtime-note"></div>
         </div>
     </section>
 

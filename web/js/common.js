@@ -411,6 +411,17 @@ function buildSnapshot(row, sysInfo) {
         ? Date.now() / 1000 - Number(row.ts_unix) : Infinity;
     const fresh = ageS >= 0 && ageS < STALE_SECONDS;
 
+    // Pack capacity for the runtime estimate: prefer the value the laptop
+    // measured and synced (system_info.battery_capacity_kwh), else the
+    // constant in config.js.
+    let capKwh = null;
+    if (sysInfo && sysInfo.battery_capacity_kwh != null
+            && Number(sysInfo.battery_capacity_kwh) > 0) {
+        capKwh = Number(sysInfo.battery_capacity_kwh);
+    } else if (typeof BATTERY_CAPACITY_KWH === "number" && BATTERY_CAPACITY_KWH > 0) {
+        capKwh = BATTERY_CAPACITY_KWH;
+    }
+
     return {
         solar: {
             power: field(row.pv_power, "W"),
@@ -425,6 +436,7 @@ function buildSnapshot(row, sysInfo) {
             power: field(row.battery_power, "W"),
             soc: field(row.battery_soc, "%"),
             soh: field(row.battery_soh, "%"),
+            capacity_kwh: field(capKwh, "kWh"),
         },
         grid: {
             voltage: field(row.grid_voltage, "V"),
@@ -453,6 +465,10 @@ function buildSnapshot(row, sysInfo) {
             serial_number: field(sysInfo ? sysInfo.serial_number : null),
             protocol_version: field(sysInfo ? sysInfo.protocol_version : null),
             product_model: field(sysInfo ? sysInfo.product_model : null),
+        },
+        runtime: {
+            reserve_soc: (typeof BATTERY_RESERVE_SOC === "number") ? BATTERY_RESERVE_SOC : 10,
+            efficiency: (typeof INVERTER_EFFICIENCY === "number") ? INVERTER_EFFICIENCY : 0.93,
         },
         timestamp: row.ts_iso || null,
         demo: false,

@@ -67,6 +67,9 @@ function updateBattery(b) {
     setValue("batt-voltage-meta", renderField(b.voltage, 1));
     setValue("batt-current", renderField(b.current, 2));
     setValue("batt-power", renderField(b.power, 0));
+    const capOk = b.capacity_kwh && b.capacity_kwh.state === "available"
+        && b.capacity_kwh.value != null;
+    setValue("batt-capacity", capOk ? Number(b.capacity_kwh.value).toFixed(2) : NORMAL_DASH);
     const socOk = b.soc && b.soc.state === "available" && b.soc.value != null;
     const soc = socOk ? Number(b.soc.value) : 0;
     const fill = document.getElementById("soc-ring-fill");
@@ -83,6 +86,64 @@ function updateBattery(b) {
     if (dot) {
         dot.className = "dot " + (!socOk ? "dot-waiting"
             : soc >= 50 ? "dot-ok" : (soc >= 20 ? "dot-warn" : "dot-error"));
+    }
+}
+
+/* ---- Battery runtime estimate ---- */
+// Time remaining is derived from the state of charge, the pack capacity and a
+// chosen consumption; it is an estimate, not a promise.
+let runtimeTouched = false;   // stop auto-filling the input once the user edits
+
+function formatRuntime(hours) {
+    if (hours == null || !isFinite(hours) || hours <= 0) return NORMAL_DASH;
+    const totalMin = Math.round(hours * 60);
+    if (totalMin < 1) return "<1m";
+    if (totalMin < 60) return totalMin + "m";
+    const h = Math.floor(totalMin / 60), m = totalMin % 60;
+    if (h >= 48) return Math.round(h / 24) + "d";
+    return m ? h + "h " + m + "m" : h + "h";
+}
+
+// usable kWh (at the battery terminals) / AC load. An AC load draws more from
+// the pack than it delivers, so divide by the inverter efficiency.
+function batteryRuntime(soc, capKwh, loadW, reserveSoc, eff) {
+    if (soc == null || capKwh == null || !(capKwh > 0)) return null;
+    if (!(loadW > 0)) return null;
+    return capKwh * Math.max(0, soc - reserveSoc) / 100 * eff / (loadW / 1000);
+}
+
+function updateRuntime(snapshot) {
+    const b = snapshot.battery || {};
+    const rt = snapshot.runtime || {};
+    const num = (f) => (f && f.state === "available" && f.value != null)
+        ? Number(f.value) : null;
+    const soc = num(b.soc);
+    const cap = num(b.capacity_kwh);
+    const load = num(snapshot.load && snapshot.load.power);
+    const battP = num(b.power);
+    const reserve = rt.reserve_soc != null ? Number(rt.reserve_soc) : 10;
+    const eff = rt.efficiency != null ? Number(rt.efficiency) : 0.93;
+
+    const input = document.getElementById("runtime-load");
+    if (input && !runtimeTouched && load != null) input.value = Math.round(load);
+    const raw = input ? input.value.trim() : "";
+    const loadW = (raw !== "" && isFinite(Number(raw))) ? Number(raw) : load;
+
+    setValue("batt-runtime", formatRuntime(batteryRuntime(soc, cap, loadW, reserve, eff)));
+
+    const note = document.getElementById("batt-runtime-note");
+    if (!note) return;
+    if (cap == null) {
+        note.textContent = "Set BATTERY_CAPACITY_KWH in config.js";
+    } else if (battP != null && battP < -20 && soc != null && soc < 100) {
+        const toFull = cap * (100 - soc) / 100 / (Math.abs(battP) / 1000);
+        note.textContent = "Charging \u2014 full in " + formatRuntime(toFull);
+    } else if (!(loadW > 0)) {
+        note.textContent = "Enter a load to estimate";
+    } else if (soc != null && soc <= reserve) {
+        note.textContent = "At reserve (" + reserve + "%)";
+    } else {
+        note.textContent = "down to " + reserve + "% reserve (est.)";
     }
 }
 
@@ -296,6 +357,7 @@ async function poll() {
         updateStatusBanner(snapshot);
         updateSolar(snapshot.solar);
         updateBattery(snapshot.battery);
+        updateRuntime(snapshot);
         updateGrid(snapshot.grid);
         updateLoad(snapshot.load, snapshot);
         updateFlow(snapshot);
@@ -330,6 +392,7 @@ async function poll() {
                     lastGood = snap;
                     updateSolar(snap.solar);
                     updateBattery(snap.battery);
+                    updateRuntime(snap);
                     updateGrid(snap.grid);
                     updateLoad(snap.load, snap);
                     updateFlow(snap);
@@ -478,6 +541,15 @@ document.addEventListener("visibilitychange", () => {
 });
 // Keep the "Updated Xs ago" label ticking between polls.
 setInterval(() => { if (lastGood) updateLastUpdate(lastGood); }, 1000);
+
+// Re-estimate immediately when the assumed consumption is edited.
+const runtimeInput = document.getElementById("runtime-load");
+if (runtimeInput) {
+    runtimeInput.addEventListener("input", () => {
+        runtimeTouched = true;
+        if (lastGood) updateRuntime(lastGood);
+    });
+}
 
 pollCycle();
 refreshEnergy();

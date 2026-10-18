@@ -129,6 +129,14 @@ Pages:
   "estimated" (no grid meter exists); Grid Import/Export kWh integrate from it.
   Live values carry an **"Updated Xs ago"** indicator; the whole UI has a
   **light/dark theme** toggle.
+  The Battery card also shows a **runtime estimate** ("time left at N W"):
+  edit the wattage to see how long the pack lasts at that consumption. It
+  needs the pack capacity, which the laptop **auto-detects** from the recorded
+  history (energy moved vs SOC change; override with `BATTERY_CAPACITY_KWH`).
+  Runtime is counted down to a `BATTERY_RESERVE_SOC` (default 10 %) reserve and
+  divided by `INVERTER_EFFICIENCY` (0.93) to turn an AC load into battery draw.
+  The hosted site uses `BATTERY_CAPACITY_KWH` from `web/config.js` (or
+  `system_info.battery_capacity_kwh` once the SQL is applied).
 - **History** — charts of recorded data with ranges:
   **Seconds / Minutes / Hours / Days / All**, a combined **Overview** chart
   (PV / load / battery / SOC), time navigation and a **date-time picker**,

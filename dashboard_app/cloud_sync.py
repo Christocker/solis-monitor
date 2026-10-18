@@ -111,8 +111,13 @@ def build_row(snapshot):
     return row
 
 
-def sync_system_info(snapshot, url, key):
-    """Write the system identity row once (serial, model, protocol)."""
+def sync_system_info(snapshot, url, key, capacity_kwh=None):
+    """Write the system identity row (serial, model, protocol, capacity).
+
+    Returns True when the row was written with the capacity included, False
+    when the optional battery_capacity_kwh column is not present yet (older
+    schema) and the identity was written without it.
+    """
     sys = snapshot.get("system", {})
     product = sys.get("product_model", {}).get("value")
     row = {
@@ -123,6 +128,9 @@ def sync_system_info(snapshot, url, key):
         # product_model is an INTEGER column in Supabase
         "product_model": int(product) if product is not None else None,
     }
+    include_cap = capacity_kwh is not None
+    if include_cap:
+        row["battery_capacity_kwh"] = capacity_kwh
     # Upsert: insert or update row with id=1
     headers = {
         "apikey": key,
@@ -130,12 +138,18 @@ def sync_system_info(snapshot, url, key):
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates,return=minimal",
     }
-    resp = requests.post(
-        f"{url}/rest/v1/system_info?on_conflict=id",
-        headers=headers, data=json.dumps([row]), timeout=10,
-    )
+    endpoint = f"{url}/rest/v1/system_info?on_conflict=id"
+    resp = requests.post(endpoint, headers=headers,
+                         data=json.dumps([row]), timeout=10)
+    if resp.status_code >= 400 and include_cap:
+        # Column not added yet -> write identity without the capacity.
+        row.pop("battery_capacity_kwh", None)
+        resp = requests.post(endpoint, headers=headers,
+                             data=json.dumps([row]), timeout=10)
+        resp.raise_for_status()
+        return False
     resp.raise_for_status()
-    return resp
+    return True
 
 
 def supabase_upsert(table, rows, url, key, on_conflict=None):
@@ -175,6 +189,7 @@ class CloudSyncer:
         self._last_heartbeat = 0.0
         self._last_energy = 0.0
         self._error_printed = 0
+        self._capacity_synced = False   # battery capacity pushed to system_info
 
     @property
     def configured(self):
@@ -284,6 +299,23 @@ class CloudSyncer:
                         sync_system_info(snapshot, self._url, self._key)
                         sync_started = True
                         print(" Cloud sync: system identity synced.")
+
+                # Battery capacity is measured from history asynchronously, so
+                # push it once it is known (needs the schema column; harmless
+                # if the column has not been added yet).
+                if not self._capacity_synced:
+                    from . import data_logger
+                    info = data_logger.battery_capacity_info()
+                    cap = info.get("capacity_kwh") if info else None
+                    if cap:
+                        if sync_system_info(snapshot, self._url, self._key,
+                                            capacity_kwh=cap):
+                            self._capacity_synced = True
+                            print(f" Cloud sync: battery capacity synced ({cap} kWh).")
+                        else:
+                            self._capacity_synced = True
+                            print(" Cloud sync: battery_capacity_kwh column missing "
+                                  "- run supabase/schema.sql to sync capacity.")
 
                 row = build_row(snapshot)
                 row["ts_unix"] = time.time()

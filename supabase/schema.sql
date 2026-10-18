@@ -35,8 +35,14 @@ create table if not exists public.system_info (
     inverter_model text,
     protocol_version integer,
     product_model integer,
+    -- Battery pack capacity (kWh) measured by the laptop, used by the website
+    -- for the "battery time left" estimate.
+    battery_capacity_kwh double precision,
     updated_at timestamp with time zone default now()
 );
+
+-- Existing deployments: add the capacity column if it is missing.
+alter table public.system_info add column if not exists battery_capacity_kwh double precision;
 
 -- ============================================================
 -- Row Level Security (RLS)
