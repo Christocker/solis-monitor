@@ -1,7 +1,7 @@
 /* Solis Monitor service worker — installable app + offline last-known data.
    Keep VERSION in lockstep with the ?v= query string in the HTML pages so a
    deploy that changes JS/CSS without touching sw.js still refreshes. */
-const VERSION = "20261015b";
+const VERSION = "20261015c";
 const CACHE = "solis-" + VERSION;
 const SHELL = [
     "./", "./index.html", "./history", "./history.html",

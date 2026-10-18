@@ -131,6 +131,22 @@ function updateRuntime(snapshot) {
 
     setValue("batt-runtime", formatRuntime(batteryRuntime(soc, cap, loadW, reserve, eff)));
 
+    // Mirror the estimate in the energy-flow diagram, always at the live load.
+    const timeEl = document.getElementById("flow-batt-time");
+    if (timeEl) {
+        const charging = battP != null && battP < -20 && soc != null && soc < 100;
+        const autoHours = charging
+            ? cap * (100 - soc) / 100 / (Math.abs(battP) / 1000)
+            : batteryRuntime(soc, cap, load, reserve, eff);
+        if (autoHours == null) {
+            timeEl.textContent = NORMAL_DASH;
+            timeEl.classList.add("is-empty");
+        } else {
+            timeEl.textContent = formatRuntime(autoHours) + (charging ? " to full" : " left");
+            timeEl.classList.remove("is-empty");
+        }
+    }
+
     const note = document.getElementById("batt-runtime-note");
     if (!note) return;
     if (cap == null) {
