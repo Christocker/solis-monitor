@@ -129,8 +129,11 @@ Pages:
   "estimated" (no grid meter exists); Grid Import/Export kWh integrate from it.
   Live values carry an **"Updated Xs ago"** indicator; the whole UI has a
   **light/dark theme** toggle.
-  The Battery card also shows a **runtime estimate** ("time left at N W"):
-  edit the wattage to see how long the pack lasts at that consumption. It
+  The Battery card also shows a **runtime estimate** ("time left at N W"),
+  mirrored on the **Battery node of the Energy Flow diagram** where it is
+  computed automatically from the **current load** (the diagram ignores the
+  card's what-if value). Edit the wattage on the card to see how long the pack
+  lasts at other consumption levels. It
   needs the pack capacity, which the laptop **auto-detects** from the recorded
   history (energy moved vs SOC change; override with `BATTERY_CAPACITY_KWH`).
   Runtime is counted down to a `BATTERY_RESERVE_SOC` (default 10 %) reserve and
