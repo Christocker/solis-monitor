@@ -110,6 +110,10 @@ async function fetchReadings(startUnix, endUnix, limit) {
 const HISTORY_CHUNK_SECONDS = 24 * 3600;
 const HISTORY_CONCURRENCY = 2;
 const HISTORY_MAX_CALLS = 200;
+// Never split a range into more than this many chunks (a year-wide window would
+// otherwise need one call per day); one-day chunks are as large as Supabase's
+// statement budget reliably tolerates.
+const HISTORY_MAX_CHUNKS = 160;
 let _rpcCalls = 0;
 
 // Cache merged bucket results for a window so revisiting a past window (or
@@ -143,6 +147,14 @@ async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
         if (!bounds) return [];
         if (s == null) s = bounds.min;
         if (e == null) e = bounds.max;
+    } else if (e - s > 2 * 86400) {
+        // A requested window can reach before the first sample (e.g. Months on
+        // a short archive); clamp it so we never scan empty time.
+        const bounds = await fetchReadingsBounds();
+        if (bounds) {
+            s = Math.max(s, bounds.min);
+            e = Math.min(e, bounds.max);
+        }
     }
     if (!(e > s)) return await historyBucketsCall(s, e, buckets);
 
@@ -158,7 +170,10 @@ async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     }
 
     const span = e - s;
-    const n = Math.max(1, Math.ceil(span / HISTORY_CHUNK_SECONDS));
+    // Small ranges keep daily chunks; wide ones grow the chunk so the total
+    // call count stays under the budget (and the function's 25 s timeout).
+    const chunkSeconds = Math.max(HISTORY_CHUNK_SECONDS, span / HISTORY_MAX_CHUNKS);
+    const n = Math.max(1, Math.ceil(span / chunkSeconds));
     if (n === 1) {
         const rows = await historyBucketsCall(s, e, buckets);
         _histCacheSet(cacheKey, rows);
@@ -262,6 +277,11 @@ async function fetchReadingsBounds() {
     const [maxRow] = await maxRes.json();
     if (!minRow || !maxRow) return null;
     return { min: minRow.ts_unix, max: maxRow.ts_unix };
+}
+
+// Same name/contract as the local build's history meta helper.
+async function fetchHistoryBounds() {
+    return await fetchReadingsBounds();
 }
 
 // Exact number of readings (uses the count header; a plain select is capped).

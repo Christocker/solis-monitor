@@ -1064,7 +1064,11 @@ body {
     background: var(--surface-muted);
     border: 1px solid var(--hairline);
     border-radius: var(--radius-pill);
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
 }
+.range-buttons::-webkit-scrollbar { display: none; }
 .range-btn {
     background: transparent;
     border: none;
@@ -1146,6 +1150,92 @@ body {
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
+
+/* Draggable time window — full recording ruler with a movable window */
+.timeline {
+    --tl-fill: rgba(0, 113, 227, 0.14);
+    --tl-edge: rgba(0, 113, 227, 0.55);
+    margin: -8px 0 26px;
+}
+:root[data-theme="dark"] .timeline {
+    --tl-fill: rgba(10, 132, 255, 0.22);
+    --tl-edge: rgba(10, 132, 255, 0.65);
+}
+.timeline-track {
+    position: relative;
+    height: 44px;
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius-md);
+    background:
+        repeating-linear-gradient(90deg, var(--hairline) 0 1px, transparent 1px 20%),
+        var(--surface);
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: crosshair;
+}
+.timeline-track.is-disabled { opacity: 0.4; pointer-events: none; }
+.timeline-track.dragging { cursor: grabbing; }
+.timeline-window {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 18px;
+    background: var(--tl-fill);
+    border: 1px solid var(--tl-edge);
+    border-radius: 10px;
+    box-shadow: var(--shadow-xs);
+    cursor: grab;
+    transition: background 0.2s var(--ease), box-shadow 0.2s var(--ease);
+}
+.timeline-track.dragging .timeline-window { cursor: grabbing; box-shadow: var(--shadow-sm); }
+.timeline-window:focus-visible { outline: 2px solid var(--tint); outline-offset: 2px; }
+.timeline-window-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+.timeline-grip {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    width: 10px;
+    border-radius: 5px;
+    background: var(--tl-edge);
+    opacity: 0.5;
+    cursor: ew-resize;
+    transition: opacity 0.2s var(--ease);
+}
+.timeline-grip.left { left: 3px; }
+.timeline-grip.right { right: 3px; }
+.timeline-grip:hover { opacity: 0.95; }
+.timeline-window.is-full .timeline-grip { display: none; }
+.timeline-window.is-tiny { padding: 0; }
+.timeline-window.is-tiny .timeline-window-label { display: none; }
+.timeline-window.is-tiny .timeline-grip { width: 3px; border-radius: 2px; }
+.timeline-scale {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+}
+.timeline-scale span:first-child { text-align: left; }
+.timeline-scale span:last-child { text-align: right; }
+
+/* Charts are draggable too: drag horizontally to pan through time. */
+.chart-card canvas { touch-action: pan-y; }
+.chart-card canvas.panning { cursor: grabbing; }
 
 /* ============================================================
    Charts
@@ -1266,10 +1356,12 @@ body {
     .soc-ring, .soc-ring svg { width: 84px; height: 84px; }
     .charts-grid { grid-template-columns: 1fr; }
     .range-bar { flex-direction: column; align-items: stretch; }
-    .range-buttons { border-radius: var(--radius-md); }
-    .range-btn { flex: 1; text-align: center; }
+    .range-buttons { border-radius: var(--radius-md); overflow-x: auto; }
+    .range-btn { flex: 1 0 auto; text-align: center; padding: 7px 12px; }
     .time-nav { flex-wrap: wrap; justify-content: center; }
     .nav-label { width: 100%; text-align: center; white-space: normal; }
+    .timeline-window { padding: 0 10px; }
+    .timeline-track { height: 40px; }
 }
 
 @media (max-width: 380px) {

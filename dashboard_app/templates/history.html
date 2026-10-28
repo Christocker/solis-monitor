@@ -10,7 +10,7 @@
 {% block content %}
 <header class="page-header">
     <h1>History</h1>
-    <p class="subtitle">Recorded readings across the selected range</p>
+    <p class="subtitle">Recorded readings — drag the time window or pick a range</p>
 </header>
 
 <div class="range-bar">
@@ -19,7 +19,7 @@
         <button class="range-btn active" data-range="minutes">Minutes</button>
         <button class="range-btn" data-range="hours">Hours</button>
         <button class="range-btn" data-range="days">Days</button>
-        <button class="range-btn" data-range="all">All</button>
+        <button class="range-btn" data-range="months">Months</button>
     </div>
     <div class="time-nav">
         <button id="nav-prev" class="nav-btn" title="Earlier window" aria-label="Earlier window">&lsaquo;</button>
@@ -28,6 +28,18 @@
         <button id="nav-now" class="nav-btn latest" title="Jump to the latest data">Latest</button>
     </div>
     <span id="nav-label" class="nav-label"></span>
+</div>
+
+<div class="timeline" id="timeline">
+    <div class="timeline-track" id="timeline-track">
+        <div class="timeline-window" id="timeline-window" role="slider" tabindex="0"
+             aria-label="Visible time window — drag to move, edges to zoom">
+            <span class="timeline-grip left" data-edge="start"></span>
+            <span class="timeline-window-label" id="timeline-window-label"></span>
+            <span class="timeline-grip right" data-edge="end"></span>
+        </div>
+    </div>
+    <div class="timeline-scale" id="timeline-scale" aria-hidden="true"></div>
 </div>
 
 <div class="stat-grid history-stats">

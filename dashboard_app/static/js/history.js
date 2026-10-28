@@ -212,6 +212,7 @@ function initCharts() {
     }
     const ov = makeOverviewChart();
     if (ov) charts["chart-overview"] = ov;
+    for (const id of Object.keys(charts)) enableChartPan(id);
 }
 
 /* ---------------- View handling ---------------- */
@@ -221,13 +222,24 @@ let currentView = "minutes";
 // a past moment so the Seconds/Minutes views can be explored backwards
 // through the whole recording.
 let anchorUnix = null;
+// Free-form window set by dragging the timeline (or panning a chart):
+// { start, end } in UNIX seconds. When null the preset view defines it.
+let customWindow = null;
+// Full recorded range { min, max }, loaded once from the history meta API.
+let historyBounds = null;
+// Windows ending this close to the newest sample count as "live" and follow
+// new data automatically.
+const LIVE_EDGE_SECONDS = 60;
+// Never zoom in closer than one minute (the logger samples every ~2 s).
+const TIMELINE_MIN_SPAN = 60;
 
 const VIEWS = {
-    seconds: { label: "Seconds", window: 600,     points: 300, raw: true },      // 10 min @ 2s
-    minutes: { label: "Minutes", window: 10800,   points: 360, buckets: 720 },   //  3 h
-    hours:   { label: "Hours",   window: 604800,  points: 336, buckets: 672 },   //  7 d
-    days:    { label: "Days",    window: 2592000, points: 240, buckets: 720 },   // 30 d
-    all:     { label: "All",     window: null,    points: 300, buckets: 600 },   // first record -> now
+    seconds: { label: "Seconds", window: 600,      points: 300, raw: true },     // 10 min @ 2s
+    minutes: { label: "Minutes", window: 10800,    points: 360, buckets: 720 },  //  3 h
+    hours:   { label: "Hours",   window: 604800,   points: 336, buckets: 672 },  //  7 d
+    days:    { label: "Days",    window: 2592000,  points: 240, buckets: 720 },  // 30 d
+    months:  { label: "Months",  window: 31536000, points: 365, buckets: 900 },  // 365 d
+    all:     { label: "All",     window: null,     points: 300, buckets: 600 },  // first record -> now
 };
 
 // End time of the visible window (now when live, else the pinned anchor).
@@ -236,26 +248,63 @@ function windowEnd() {
 }
 
 function viewRange(view) {
+    if (customWindow) {
+        // Live windows keep their length but follow the newest data.
+        if (anchorUnix == null) {
+            const span = customWindow.end - customWindow.start;
+            const end = windowEnd();
+            return { start: end - span, end: end };
+        }
+        return { start: customWindow.start, end: customWindow.end };
+    }
     const w = VIEWS[view].window;
     if (w == null) return { start: null, end: null };   // full recorded range
     const end = windowEnd();
-    return { start: end - w, end: end };
+    let start = end - w;
+    const b = timelineBounds();
+    if (b && start < b.min) start = b.min;   // never ask before the first sample
+    return { start: start, end: end };
 }
 
-function timeLabel(ts, view) {
+// Length of a range in seconds, or null for the full recorded range.
+function rangeSpan(rng) {
+    return (rng.start == null || rng.end == null) ? null : rng.end - rng.start;
+}
+
+// True when the window is pinned to (or effectively at) the newest data.
+function isLiveRange(rng) {
+    if (anchorUnix != null) return false;
+    if (rng.end == null) return true;
+    const maxT = (historyBounds && historyBounds.max) || Date.now() / 1000;
+    return rng.end >= maxT - LIVE_EDGE_SECONDS;
+}
+
+function timeLabel(ts, mode) {
     const d = new Date(ts * 1000);
     const pad = (n) => String(n).padStart(2, "0");
     const hh = pad(d.getHours()), mm = pad(d.getMinutes()), ss = pad(d.getSeconds());
-    switch (view) {
+    switch (mode) {
         case "seconds": return hh + ":" + mm + ":" + ss;
         case "minutes": return hh + ":" + mm;
         case "hours": return (d.getMonth() + 1) + "/" + d.getDate() + " " + hh + ":00";
+        case "months": return d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
         case "all": return (d.getMonth() + 1) + "/" + d.getDate() + " " + hh + ":" + mm;
         default: return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
     }
 }
 
-function aggregate(rows, view, points, col) {
+// Finest sensible label for a free-form span. Preset views keep their own
+// label style; a dragged window picks whichever reads best at its length.
+function labelModeForSpan(span, fallback) {
+    if (span == null) return fallback;
+    if (span <= 900) return "seconds";
+    if (span <= 6 * 3600) return "minutes";
+    if (span <= 8 * 86400) return "hours";
+    if (span <= 90 * 86400) return "days";
+    return "months";
+}
+
+function aggregate(rows, labelMode, points, col) {
     if (rows.length === 0) return { labels: [], data: [] };
     // Never create more buckets than there are rows, otherwise sparse ranges
     // render as (invisible) isolated points on an otherwise blank chart.
@@ -277,7 +326,7 @@ function aggregate(rows, view, points, col) {
                 weight += w;
             }
         }
-        labels.push(timeLabel(bStart, view));
+        labels.push(timeLabel(bStart, labelMode));
         data.push(weight ? sum / weight : null);
     }
     return { labels, data };
@@ -381,9 +430,7 @@ function clearCharts() {
     }
 }
 
-function renderCharts(rows, view) {
-    const points = VIEWS[view].points;
-
+function renderCharts(rows, labelMode, points) {
     // Summary stats
     for (const def of STAT_DEFS) {
         setText(def.id, def.fn(rows));
@@ -393,7 +440,7 @@ function renderCharts(rows, view) {
     for (const def of CHART_DEFS) {
         const chart = charts[def.id];
         if (!chart) continue;
-        const agg = aggregate(rows, view, points, def.col);
+        const agg = aggregate(rows, labelMode, points, def.col);
         chart.data.labels = agg.labels;
         chart.data.datasets = [{ data: agg.data }];
         if (def.type === "line") {
@@ -406,10 +453,10 @@ function renderCharts(rows, view) {
 
     const ov = charts["chart-overview"];
     if (ov) {
-        const aPv = aggregate(rows, view, points, "pv_power");
-        const aLoad = aggregate(rows, view, points, "load_power");
-        const aBatt = aggregate(rows, view, points, "battery_power");
-        const aSoc = aggregate(rows, view, points, "battery_soc");
+        const aPv = aggregate(rows, labelMode, points, "pv_power");
+        const aLoad = aggregate(rows, labelMode, points, "load_power");
+        const aBatt = aggregate(rows, labelMode, points, "battery_power");
+        const aSoc = aggregate(rows, labelMode, points, "battery_soc");
         ov.data.labels = aPv.labels;
         ov.data.datasets[0].data = aPv.data;
         ov.data.datasets[1].data = aLoad.data;
@@ -420,6 +467,19 @@ function renderCharts(rows, view) {
 }
 
 let loadToken = 0;
+
+// How to query a window: raw samples for short spans (full resolution),
+// server-side buckets for everything longer.
+function planForRange(rng, view) {
+    const span = rangeSpan(rng);
+    if (span == null) return { raw: !!view.raw, limit: 10000, buckets: view.buckets };
+    if (span <= 15 * 60) {
+        const limit = Math.max(2000, Math.min(20000, Math.round(span / 1.5)));
+        return { raw: true, limit: limit, buckets: view.buckets };
+    }
+    return { raw: false, limit: 10000, buckets: span >= 90 * 86400 ? 900 : 480 };
+}
+
 async function loadHistory() {
     const token = ++loadToken;
     const viewKey = currentView;          // capture the view this load is for
@@ -427,14 +487,17 @@ async function loadHistory() {
     const statusEl = document.getElementById("history-status");
     statusEl.textContent = "Loading...";
     const rng = viewRange(viewKey);
+    const span = rangeSpan(rng);
+    const plan = planForRange(rng, view);
+    const points = view.points;
     updateTimeNav(rng);
-    const onProgress = view.raw ? null : (done, total) => {
+    const onProgress = plan.raw ? null : (done, total) => {
         if (token === loadToken) statusEl.textContent = "Loading " + done + "/" + total + "...";
     };
     try {
-        const rows = view.raw
-            ? await fetchReadings(rng.start, rng.end, 10000)
-            : await fetchHistoryBuckets(rng.start, rng.end, view.buckets, onProgress);
+        const rows = plan.raw
+            ? await fetchReadings(rng.start, rng.end, plan.limit)
+            : await fetchHistoryBuckets(rng.start, rng.end, plan.buckets, onProgress);
         if (token !== loadToken) return;  // superseded by a newer request
         for (const r of rows) {
             r.load_power = (r.house_load == null && r.backup_load == null)
@@ -446,8 +509,14 @@ async function loadHistory() {
             statusEl.textContent = "No recorded data in this range yet.";
             return;
         }
-        renderCharts(rows, viewKey);
-        statusEl.textContent = rows.length + (view.raw ? " samples" : " buckets");
+        // Label density follows the data actually plotted (a requested window
+        // can reach past the first sample, e.g. Months on a short archive).
+        const dataSpan = rows.length > 1
+            ? rows[rows.length - 1].ts_unix - rows[0].ts_unix : span;
+        const labelMode = (viewKey === "all" && !customWindow)
+            ? "all" : labelModeForSpan(dataSpan, "days");
+        renderCharts(rows, labelMode, points);
+        statusEl.textContent = rows.length + (plan.raw ? " samples" : " buckets");
     } catch (err) {
         if (token !== loadToken) return;
         clearCharts();
@@ -466,7 +535,12 @@ function writeState() {
     try {
         const p = new URLSearchParams();
         p.set("view", currentView);
-        if (anchorUnix != null) p.set("t", String(Math.round(anchorUnix)));
+        if (customWindow) {
+            p.set("s", String(Math.round(customWindow.start)));
+            p.set("e", String(Math.round(customWindow.end)));
+        } else if (anchorUnix != null) {
+            p.set("t", String(Math.round(anchorUnix)));
+        }
         history.replaceState(null, "", location.pathname + "?" + p.toString());
     } catch (e) { /* ignore */ }
 }
@@ -476,15 +550,35 @@ function readStateFromURL() {
         const p = new URLSearchParams(location.search);
         const view = p.get("view");
         if (view && VIEWS[view]) currentView = view;
-        const t = p.get("t");
-        const n = Number(t);
-        anchorUnix = (t && !isNaN(n) && n < Date.now() / 1000) ? n : null;
+        anchorUnix = null;
+        customWindow = null;
+        const t = Number(p.get("t"));
+        anchorUnix = (p.get("t") && !isNaN(t) && t < Date.now() / 1000) ? t : null;
+        const s = Number(p.get("s")), e = Number(p.get("e"));
+        if (p.get("s") && p.get("e") && isFinite(s) && isFinite(e) && e > s) {
+            customWindow = { start: s, end: e };
+            anchorUnix = e < Date.now() / 1000 - LIVE_EDGE_SECONDS ? e : null;
+        }
     } catch (e) { /* ignore */ }
 }
 
+// Which preset button matches this span (null = free-form window).
+function matchPreset(span) {
+    if (span == null) return "all";
+    let best = null, bestDiff = Infinity;
+    for (const key of Object.keys(VIEWS)) {
+        const w = VIEWS[key].window;
+        if (w == null) continue;
+        const diff = Math.abs(w - span) / w;
+        if (diff < bestDiff) { bestDiff = diff; best = key; }
+    }
+    return bestDiff <= 0.02 ? best : null;
+}
+
 function syncViewButtons() {
+    const active = customWindow ? matchPreset(rangeSpan(customWindow)) : currentView;
     document.querySelectorAll(".range-btn").forEach((b) => {
-        const on = b.dataset.range === currentView;
+        const on = b.dataset.range === active;
         b.classList.toggle("active", on);
         b.setAttribute("aria-pressed", on ? "true" : "false");
     });
@@ -558,9 +652,9 @@ function exportCSV() {
 function setupViewButtons() {
     document.querySelectorAll(".range-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
-            document.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
-            btn.classList.add("active");
             currentView = btn.dataset.range;
+            customWindow = null;             // preset buttons define the window
+            anchorUnix = null;               // ...and always start live
             syncViewButtons();
             writeState();
             updateTimeNav();
@@ -579,16 +673,53 @@ function toLocalInput(ts) {
         + "T" + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
 }
 
-function shiftWindow(dir) {
-    const w = VIEWS[currentView].window;
-    if (w == null) return;                   // "All" has no fixed window
-    const now = Date.now() / 1000;
-    let a = windowEnd() + dir * w;
-    if (a > now) a = now;
-    anchorUnix = a >= now - 1 ? null : a;    // snap back to live at the end
+// Full recorded range, or null until it has loaded.
+function timelineBounds() {
+    if (historyBounds && historyBounds.min != null && historyBounds.max != null &&
+        historyBounds.max > historyBounds.min) {
+        return historyBounds;
+    }
+    return null;
+}
+
+// Clamp a window to the recording, keep it at least a minute long, and make it
+// the visible range. With commit:false it is only previewed (used mid-drag).
+function applyWindow(start, end, opts) {
+    const b = timelineBounds();
+    const maxT = b ? b.max : Date.now() / 1000;
+    const floor = b ? b.min : -Infinity;
+    let s = start, e = end;
+    if (!(e > s)) e = s + TIMELINE_MIN_SPAN;
+    if (e - s < TIMELINE_MIN_SPAN) e = s + TIMELINE_MIN_SPAN;
+
+    const span = e - s;
+    if (b && span >= b.max - b.min) {
+        s = b.min; e = b.max;                // the whole recording
+    } else {
+        if (s < floor) { s = floor; e = s + span; }
+        if (e > maxT) { e = maxT; s = Math.max(floor, e - span); }
+    }
+
+    customWindow = { start: s, end: e };
+    anchorUnix = (e >= maxT - LIVE_EDGE_SECONDS) ? null : e;
+    if (opts && opts.commit === false) return;
+    syncViewButtons();
     writeState();
     updateTimeNav();
     loadHistory();
+}
+
+function shiftWindow(dir) {
+    const r = viewRange(currentView);
+    const span = rangeSpan(r);
+    if (span == null) return;                // "All" has no fixed window
+    applyWindow(r.start + dir * span, r.end + dir * span);
+}
+
+// Move the window so it ends at `t`, keeping its current length.
+function setWindowEnd(t) {
+    const span = rangeSpan(viewRange(currentView)) || VIEWS.minutes.window;
+    applyWindow(t - span, t);
 }
 
 function setupTimeNav() {
@@ -599,14 +730,21 @@ function setupTimeNav() {
     if (prev) prev.addEventListener("click", () => shiftWindow(-1));
     if (next) next.addEventListener("click", () => shiftWindow(1));
     if (nowBtn) nowBtn.addEventListener("click", () => {
-        anchorUnix = null; writeState(); updateTimeNav(); loadHistory();
-    });
-    if (input) input.addEventListener("change", () => {
-        const t = input.value ? Math.floor(new Date(input.value).getTime() / 1000) : null;
-        anchorUnix = (t && t > Date.now() / 1000) ? null : t;
+        if (customWindow) {                  // keep the dragged length, go live
+            const span = customWindow.end - customWindow.start;
+            const end = Date.now() / 1000;
+            customWindow = { start: end - span, end };
+        }
+        anchorUnix = null;
+        syncViewButtons();
         writeState();
         updateTimeNav();
         loadHistory();
+    });
+    if (input) input.addEventListener("change", () => {
+        if (!input.value) return;
+        const t = Math.floor(new Date(input.value).getTime() / 1000);
+        if (!isNaN(t)) setWindowEnd(t);
     });
     updateTimeNav();
 }
@@ -617,28 +755,279 @@ function updateTimeNav(rng) {
     const next = document.getElementById("nav-next");
     const nowBtn = document.getElementById("nav-now");
     const label = document.getElementById("nav-label");
-    const live = anchorUnix == null;
-    const isAll = VIEWS[currentView].window == null;
+    const r = rng || viewRange(currentView);
+    const span = rangeSpan(r);
+    const live = isLiveRange(r);
+    const b = timelineBounds();
 
     if (input && document.activeElement !== input) {
-        input.value = toLocalInput(live ? Date.now() / 1000 : anchorUnix);
+        input.value = toLocalInput(live ? Date.now() / 1000 : r.end);
     }
-    if (prev) prev.disabled = isAll;
-    if (next) next.disabled = isAll || live;
+    if (prev) prev.disabled = r.start == null || (b != null && r.start <= b.min + 1);
+    if (next) next.disabled = r.end == null || live;
     if (nowBtn) {
         nowBtn.classList.toggle("active", live);
-        nowBtn.disabled = isAll;
         nowBtn.setAttribute("aria-pressed", live ? "true" : "false");
     }
     if (label) {
-        if (isAll) {
+        if (span == null) {
             label.textContent = "All recorded data";
         } else {
-            const r = rng || viewRange(currentView);
             const fmt = (ts) => new Date(ts * 1000).toLocaleString();
             label.textContent = fmt(r.start) + "  →  " + fmt(r.end) + (live ? "  (live)" : "");
         }
     }
+    renderTimeline(r);
+}
+
+/* ---------------- Draggable timeline ----------------
+   A miniature ruler of the whole recording. Drag the highlighted window to
+   move it through time; drag either edge to zoom in or out. Clicking the
+   ruler jumps the window to that point.
+-------------------------------------------------------- */
+function fmtTimelineTick(ts, span) {
+    const d = new Date(ts * 1000);
+    if (span <= 2 * 86400) {
+        return pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+    }
+    if (span <= 120 * 86400) {
+        return (d.getMonth() + 1) + "/" + d.getDate();
+    }
+    return d.toLocaleDateString(undefined, { month: "short", year: "2-digit" });
+}
+
+function fmtWindowShort(start, end) {
+    const d1 = new Date(start * 1000), d2 = new Date(end * 1000);
+    const date = (d) => d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    const time = (d) => d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    if (end - start > 36 * 3600) return date(d1) + " – " + date(d2);
+    if (d1.toDateString() === d2.toDateString()) {
+        return date(d1) + " " + time(d1) + " – " + time(d2);
+    }
+    return date(d1) + " " + time(d1) + " – " + date(d2) + " " + time(d2);
+}
+
+function renderTimelineScale(b) {
+    const el = document.getElementById("timeline-scale");
+    if (!el) return;
+    const span = b.max - b.min;
+    const n = window.matchMedia("(max-width: 640px)").matches ? 3 : 5;
+    el.textContent = "";
+    for (let i = 0; i < n; i++) {
+        const tick = document.createElement("span");
+        tick.textContent = fmtTimelineTick(b.min + span * (i / (n - 1)), span);
+        el.appendChild(tick);
+    }
+}
+
+function renderTimeline(rng) {
+    const track = document.getElementById("timeline-track");
+    const win = document.getElementById("timeline-window");
+    if (!track || !win) return;
+    const b = timelineBounds();
+    track.classList.toggle("is-disabled", !b);
+    if (!b) {
+        win.style.left = "0%";
+        win.style.width = "100%";
+        return;
+    }
+    renderTimelineScale(b);
+
+    const r = rng || viewRange(currentView);
+    const total = b.max - b.min;
+    // A live window can reach past the newest sample; clip it to the track.
+    let start = r.start == null ? b.min : Math.max(b.min, r.start);
+    let end = r.end == null ? b.max : Math.min(b.max, r.end);
+    if (!(end > start)) { start = b.min; end = b.max; }
+
+    const leftPct = ((start - b.min) / total) * 100;
+    const widthPct = Math.max(0.8, ((end - start) / total) * 100);
+    const left = Math.min(99.2, Math.max(0, leftPct));
+    win.style.left = left + "%";
+    win.style.width = Math.min(100 - left, widthPct) + "%";
+    win.classList.toggle("is-full", widthPct >= 99);
+
+    const label = document.getElementById("timeline-window-label");
+    if (label) {
+        const allView = !customWindow && VIEWS[currentView].window == null;
+        label.textContent = allView ? "All recorded data" : fmtWindowShort(start, end);
+    }
+    // A 15-minute window on a 42-day ruler is a sliver: thin the grips and drop
+    // the label so it stays clickable instead of becoming a blue blob.
+    win.classList.toggle("is-tiny", (widthPct / 100) * track.clientWidth < 44);
+    win.setAttribute("aria-valuemin", String(Math.round(b.min)));
+    win.setAttribute("aria-valuemax", String(Math.round(b.max)));
+    win.setAttribute("aria-valuenow", String(Math.round(start)));
+    win.setAttribute("aria-valuetext", fmtWindowShort(start, end));
+}
+
+let tlDrag = null;
+
+function timelinePointerDown(e) {
+    const track = document.getElementById("timeline-track");
+    const b = timelineBounds();
+    if (!track || !b || (e.button != null && e.button > 0)) return;
+    const r = viewRange(currentView);
+    let start = r.start == null ? b.min : Math.max(b.min, r.start);
+    let end = r.end == null ? b.max : Math.min(b.max, r.end);
+    const grip = e.target.closest ? e.target.closest(".timeline-grip") : null;
+    let mode = "pan";
+    let jumped = false;
+    if (grip) {
+        mode = grip.dataset.edge === "start" ? "resize-start" : "resize-end";
+    } else if (!e.target.closest(".timeline-window")) {
+        // Click on the ruler: centre the window on that instant.
+        const rect = track.getBoundingClientRect();
+        const t = b.min + ((e.clientX - rect.left) / Math.max(1, rect.width)) * (b.max - b.min);
+        const span = end - start;
+        start = t - span / 2;
+        end = t + span / 2;
+        if (start < b.min) { start = b.min; end = start + span; }
+        if (end > b.max) { end = b.max; start = end - span; }
+        applyWindow(start, end, { commit: false });
+        updateTimeNav();
+        jumped = true;
+    }
+    tlDrag = { mode: mode, x: e.clientX, start: start, end: end, moved: false, jumped: jumped };
+    try { track.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    track.classList.add("dragging");
+    e.preventDefault();
+}
+
+function timelinePointerMove(e) {
+    if (!tlDrag) return;
+    const track = document.getElementById("timeline-track");
+    const b = timelineBounds();
+    if (!track || !b) return;
+    const secPerPx = (b.max - b.min) / Math.max(1, track.clientWidth);
+    const dx = (e.clientX - tlDrag.x) * secPerPx;
+    let s = tlDrag.start, en = tlDrag.end;
+    if (tlDrag.mode === "pan") {
+        s += dx; en += dx;
+        const span = en - s;
+        if (s < b.min) { s = b.min; en = s + span; }
+        if (en > b.max) { en = b.max; s = en - span; }
+    } else if (tlDrag.mode === "resize-start") {
+        s = Math.max(b.min, Math.min(en - TIMELINE_MIN_SPAN, s + dx));
+    } else {
+        en = Math.min(b.max, Math.max(s + TIMELINE_MIN_SPAN, en + dx));
+    }
+    tlDrag.moved = tlDrag.moved || Math.abs(dx) > 0;
+    applyWindow(s, en, { commit: false });
+    updateTimeNav();
+    e.preventDefault();
+}
+
+function timelinePointerUp(e) {
+    if (!tlDrag) return;
+    const track = document.getElementById("timeline-track");
+    const committed = tlDrag.moved || tlDrag.jumped;
+    tlDrag = null;
+    if (track) {
+        track.classList.remove("dragging");
+        try { track.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    }
+    if (committed && customWindow) applyWindow(customWindow.start, customWindow.end);
+}
+
+// Left/Right pan the window; +/- zoom around its centre.
+function timelineKeyDown(e) {
+    const r = viewRange(currentView);
+    const span = rangeSpan(r);
+    if (span == null) return;
+    const step = span * (e.shiftKey ? 0.5 : 0.1);
+    const mid = (r.start + r.end) / 2;
+    switch (e.key) {
+        case "ArrowLeft": applyWindow(r.start - step, r.end - step); break;
+        case "ArrowRight": applyWindow(r.start + step, r.end + step); break;
+        case "+": case "=": {
+            const half = Math.max(TIMELINE_MIN_SPAN / 2, span / 4);
+            applyWindow(mid - half, mid + half);
+            break;
+        }
+        case "-": case "_":
+            applyWindow(mid - span, mid + span);
+            break;
+        default: return;
+    }
+    e.preventDefault();
+}
+
+// Pan every chart horizontally by dragging it (touch: vertical scroll still works).
+function enableChartPan(canvasId) {
+    const cv = document.getElementById(canvasId);
+    if (!cv || cv.dataset.panBound === "1") return;
+    cv.dataset.panBound = "1";
+    let drag = null;
+    cv.style.touchAction = "pan-y";
+    cv.addEventListener("pointerdown", (e) => {
+        if (e.button > 0) return;
+        const r = viewRange(currentView);
+        if (r.start == null || r.end == null) return;      // "All" has no window
+        drag = { x: e.clientX, start: r.start, end: r.end, moved: false };
+        try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    });
+    cv.addEventListener("pointermove", (e) => {
+        if (!drag) return;
+        const dx = e.clientX - drag.x;
+        if (!drag.moved && Math.abs(dx) < 6) return;        // a tap, not a drag
+        drag.moved = true;
+        cv.classList.add("panning");
+        const span = drag.end - drag.start;
+        const dt = -(dx / Math.max(1, cv.clientWidth)) * span;
+        applyWindow(drag.start + dt, drag.end + dt, { commit: false });
+        updateTimeNav();
+        e.preventDefault();
+    });
+    const finish = (e) => {
+        if (!drag) return;
+        const moved = drag.moved;
+        drag = null;
+        cv.classList.remove("panning");
+        try { cv.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        if (moved && customWindow) applyWindow(customWindow.start, customWindow.end);
+    };
+    cv.addEventListener("pointerup", finish);
+    cv.addEventListener("pointercancel", finish);
+}
+
+async function loadBounds() {
+    if (typeof fetchHistoryBounds !== "function") return;
+    try {
+        // Never block the first chart load on a slow meta request.
+        const b = await Promise.race([
+            fetchHistoryBounds(),
+            new Promise((resolve) => setTimeout(() => resolve(null), 2500)),
+        ]);
+        if (!b || b.min == null || b.max == null || !(b.max > b.min)) return;
+        historyBounds = { min: b.min, max: b.max };
+        // Now that the newest sample is known, a window parked at the end can
+        // follow new data again.
+        if (anchorUnix != null && anchorUnix >= b.max - LIVE_EDGE_SECONDS &&
+                Date.now() / 1000 - anchorUnix < 300) {
+            anchorUnix = null;
+        }
+    } catch (e) { /* timeline stays disabled; history itself still works */ }
+    updateTimeNav();
+}
+
+let timelineReady = null;
+
+function setupTimeline() {
+    const track = document.getElementById("timeline-track");
+    if (!track) return;
+    track.addEventListener("pointerdown", timelinePointerDown);
+    track.addEventListener("pointermove", timelinePointerMove);
+    track.addEventListener("pointerup", timelinePointerUp);
+    track.addEventListener("pointercancel", timelinePointerUp);
+    const win = document.getElementById("timeline-window");
+    if (win) win.addEventListener("keydown", timelineKeyDown);
+    window.addEventListener("resize", () => {
+        const b = timelineBounds();
+        if (b) renderTimelineScale(b);
+        renderTimeline();
+    });
+    timelineReady = loadBounds();
 }
 
 // Rebuild charts with the new palette when the theme changes.
@@ -659,20 +1048,27 @@ window.addEventListener("popstate", () => {
     loadHistory();
 });
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     readStateFromURL();
     initCharts();
     setupViewButtons();
     setupTimeNav();
+    setupTimeline();
     setupShare();
     setupExport();
+    renderTimeline();
+    // Wait (briefly) for the archive bounds so the first query is clipped to
+    // real data — otherwise "Months" would scan empty time before the start.
+    if (timelineReady) await timelineReady;
+    updateTimeNav();
     writeState();
     loadHistory();
-    // Auto-refresh only the live, cheap ranges. When pinned to a past window
-    // the data is static, so there is nothing to refresh.
+    // Auto-refresh only live, cheap ranges. A pinned window is static, and a
+    // multi-day live window does not gain detail every 30 s.
     setInterval(() => {
-        if (anchorUnix == null && (currentView === "seconds" || currentView === "minutes")) {
-            loadHistory();
-        }
+        if (anchorUnix != null) return;
+        const span = rangeSpan(viewRange(currentView));
+        const cheapView = currentView === "seconds" || currentView === "minutes";
+        if (cheapView || (span != null && span <= 86400)) loadHistory();
     }, 30000);
 });

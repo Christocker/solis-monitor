@@ -62,6 +62,13 @@ async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     return rows;
 }
 
+// First and last recorded timestamps (used to scale the draggable timeline).
+async function fetchHistoryBounds() {
+    const data = await fetchJSON("/api/history/meta", 15000);
+    if (!data || data.first_ts == null || data.last_ts == null) return null;
+    return { min: data.first_ts, max: data.last_ts };
+}
+
 // Update the sidebar global status pill based on snapshot.
 function updateGlobalStatus(snapshot) {
     const el = document.getElementById("global-status");
