@@ -287,7 +287,16 @@ async function historyBucketsRpc(startUnix, endUnix, buckets, fn) {
 }
 
 // First and last recorded timestamps (for the full-range "All" view).
+// Archive bounds change slowly (the first row never moves) but cost two
+// round-trips, so keep them briefly. History loads ask twice per load
+// (page bounds + window clamping), which used to double that latency.
+const BOUNDS_TTL_MS = 30 * 1000;
+let _boundsCache = null;
+
 async function fetchReadingsBounds() {
+    if (_boundsCache && Date.now() - _boundsCache.t < BOUNDS_TTL_MS) {
+        return { min: _boundsCache.min, max: _boundsCache.max };
+    }
     const base = SUPABASE_URL + "/rest/v1/readings?select=ts_unix&limit=1&order=";
     const [minRes, maxRes] = await Promise.all([
         supabaseFetch(base + "ts_unix.asc", { headers: supabaseHeaders() }),
@@ -301,6 +310,7 @@ async function fetchReadingsBounds() {
     const [minRow] = await minRes.json();
     const [maxRow] = await maxRes.json();
     if (!minRow || !maxRow) return null;
+    _boundsCache = { t: Date.now(), min: minRow.ts_unix, max: maxRow.ts_unix };
     return { min: minRow.ts_unix, max: maxRow.ts_unix };
 }
 
