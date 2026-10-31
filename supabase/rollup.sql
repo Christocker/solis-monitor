@@ -137,12 +137,20 @@ do $$
 declare
     d double precision;
     hi double precision;
+    have double precision;
 begin
-    select min(ts_unix), max(ts_unix) + 1 into d, hi from public.readings;
+    select max(ts_unix) + 1 into hi from public.readings;
+    select max(bucket_ts) into have from public.readings_1m;
+    -- Resume from the newest rollup minute so re-running this file only fills
+    -- the tail instead of rebuilding the whole archive.
+    d := coalesce(have, (select min(ts_unix) from public.readings));
     while d is not null and d < hi loop
         perform public.readings_rollup_refresh(d, least(d + 86400, hi));
         d := d + 86400;
     end loop;
+    if hi is not null then
+        analyze public.readings_1m;
+    end if;
 end $$;
 
 -- ------------------------------------------------------------
@@ -171,6 +179,10 @@ create trigger readings_rollup_touch
 -- ------------------------------------------------------------
 -- 5. Fast bucket query (same shape as history_buckets)
 -- ------------------------------------------------------------
+-- Recreate from scratch so a changed column list (e.g. dropping bucket_width)
+-- does not hit "cannot change return type of existing function".
+drop function if exists public.history_buckets_fast(double precision, double precision, integer);
+
 create or replace function public.history_buckets_fast(
     p_start double precision default null,
     p_end double precision default null,
@@ -180,7 +192,6 @@ returns table (
     bucket_ts double precision,
     samples bigint,
     grid_seconds double precision,
-    bucket_width double precision,
     pv_power double precision,
     pv1_voltage double precision,
     pv1_current double precision,
@@ -222,7 +233,14 @@ begin
     -- granular and a row cannot be split across two buckets).
     if w < 900 then
         return query
-            select * from public.history_buckets(p_start, p_end, p_buckets);
+            select h.bucket_ts, h.samples, h.grid_seconds,
+                   h.pv_power, h.pv1_voltage, h.pv1_current,
+                   h.pv2_voltage, h.pv2_current,
+                   h.grid_voltage, h.grid_frequency,
+                   h.battery_voltage, h.battery_current, h.battery_power,
+                   h.battery_soc, h.battery_soh,
+                   h.house_load, h.backup_load, h.pv_power_max
+              from public.history_buckets(p_start, p_end, p_buckets) h;
         return;
     end if;
 
@@ -236,7 +254,14 @@ begin
       into r_first, r_last;
     if r_first is null or r_first > s + 60 or r_last < e - 240 then
         return query
-            select * from public.history_buckets(p_start, p_end, p_buckets);
+            select h.bucket_ts, h.samples, h.grid_seconds,
+                   h.pv_power, h.pv1_voltage, h.pv1_current,
+                   h.pv2_voltage, h.pv2_current,
+                   h.grid_voltage, h.grid_frequency,
+                   h.battery_voltage, h.battery_current, h.battery_power,
+                   h.battery_soc, h.battery_soh,
+                   h.house_load, h.backup_load, h.pv_power_max
+              from public.history_buckets(p_start, p_end, p_buckets) h;
         return;
     end if;
 
@@ -245,7 +270,6 @@ begin
         min(r.ts_first)::double precision                    as bucket_ts,
         sum(r.samples)::bigint                               as samples,
         sum(r.grid_seconds)::double precision                as grid_seconds,
-        w                                                    as bucket_width,
         (sum(r.pv_power_sum) / nullif(sum(r.pv_power_n), 0)::double precision)::double precision,
         (sum(r.pv1_voltage_sum) / nullif(sum(r.pv1_voltage_n), 0)::double precision)::double precision,
         (sum(r.pv1_current_sum) / nullif(sum(r.pv1_current_n), 0)::double precision)::double precision,
