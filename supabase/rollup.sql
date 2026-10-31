@@ -52,6 +52,14 @@ drop policy if exists "readings_1m public read" on public.readings_1m;
 create policy "readings_1m public read"
     on public.readings_1m for select using (true);
 
+-- The trigger writes through a SECURITY DEFINER function (owner = postgres),
+-- so this policy is only a belt-and-braces fallback for direct service writes.
+drop policy if exists "readings_1m service write" on public.readings_1m;
+create policy "readings_1m service write"
+    on public.readings_1m for all
+    to service_role
+    using (true) with check (true);
+
 grant select on public.readings_1m to anon, authenticated;
 grant select, insert, update, delete on public.readings_1m to service_role;
 
@@ -64,6 +72,8 @@ create or replace function public.readings_rollup_refresh(
 )
 returns void
 language plpgsql
+security definer
+set search_path = public
 as $$
 begin
     delete from public.readings_1m
@@ -112,6 +122,13 @@ begin
 end;
 $$;
 
+-- The refresh helper is internal: only the trigger (definer) and the owner
+-- need it. Do not expose a generic "rebuild any range" endpoint to clients.
+revoke all on function public.readings_rollup_refresh(double precision, double precision)
+    from public;
+grant execute on function public.readings_rollup_refresh(double precision, double precision)
+    to service_role;
+
 -- ------------------------------------------------------------
 -- 3. Backfill existing history (day-sized chunks so no single
 --    statement runs long). Safe to re-run; it just rebuilds.
@@ -134,6 +151,8 @@ end $$;
 create or replace function public.readings_rollup_touch()
 returns trigger
 language plpgsql
+security definer
+set search_path = public
 as $$
 declare
     m double precision;
