@@ -62,9 +62,42 @@ CREATE TABLE IF NOT EXISTS readings (
 CREATE INDEX IF NOT EXISTS idx_readings_ts ON readings(ts_unix);
 """
 
+# Pre-aggregated per-minute rollup. Wide History windows would otherwise scan
+# every raw row (~1.8M for a month of 2-second samples); reading ~43k rollup
+# rows instead turns a multi-second sweep into a few hundred milliseconds.
+# Per column we keep SUM(value) and COUNT(value) so AVG() can be rebuilt
+# exactly (NULLs are ignored, exactly like AVG over the raw rows).
+ROLLUP_TABLE = "readings_1m"
+ROLLUP_SCHEMA = """
+CREATE TABLE IF NOT EXISTS readings_1m (
+    bucket_ts INTEGER PRIMARY KEY,   -- minute start (unix seconds)
+    samples INTEGER NOT NULL,
+    ts_first REAL,
+    ts_last REAL,
+    grid_seconds REAL,               -- grid-connected seconds in the minute
+    pv_power_max REAL,
+    {columns}
+);
+"""
+
+# Buckets narrower than this are read from the raw table (rollup resolution).
+# Wide windows only: a minute-granular rollup row is assigned to a bucket as a
+# whole, so with narrow buckets the shift at a bucket edge would be visible.
+# Windows with sub-15-minute buckets are cheap to scan raw anyway (a full day
+# over 240 buckets takes ~100 ms).
+ROLLUP_MIN_BUCKET = 900.0
+
 
 def _col_decl(name):
     return f"{name} REAL"
+
+
+def _rollup_cols():
+    out = []
+    for _, c in FIELDS:
+        out.append(f"{c}_sum REAL")
+        out.append(f"{c}_n INTEGER")
+    return out
 
 
 class DataLogger:
@@ -87,6 +120,34 @@ class DataLogger:
             + ")"
         )
 
+        # Recomputes the rollup rows for every minute touched by [start, end).
+        # INSERT OR REPLACE makes it idempotent: the current minute is simply
+        # rebuilt after each new sample.
+        rollup_names = ["bucket_ts", "samples", "ts_first", "ts_last",
+                        "grid_seconds", "pv_power_max"]
+        rollup_values = [
+            "CAST(ts_unix / 60 AS INTEGER) * 60",
+            "COUNT(*)",
+            "MIN(ts_unix)",
+            "MAX(ts_unix)",
+            ("(CASE WHEN COUNT(*) > 1 THEN "
+             "SUM(CASE WHEN grid_voltage >= 50 THEN 1 ELSE 0 END) * 1.0 "
+             "* (MAX(ts_unix) - MIN(ts_unix)) / (COUNT(*) - 1) "
+             "ELSE 0 END)"),
+            "MAX(pv_power)",
+        ]
+        for _, c in FIELDS:
+            rollup_names += [f"{c}_sum", f"{c}_n"]
+            rollup_values += [f"SUM({c})", f"COUNT({c})"]
+        self._rollup_sql = (
+            f"INSERT OR REPLACE INTO {ROLLUP_TABLE} ("
+            + ", ".join(rollup_names) + ") SELECT "
+            + ", ".join(rollup_values)
+            + " FROM readings WHERE ts_unix >= ? AND ts_unix < ?"
+            + " GROUP BY CAST(ts_unix / 60 AS INTEGER)"
+        )
+        self._rollup_warned = False
+
     # ------------------------------------------------------------------
     def _connect(self):
         # Schema is created once in _init_db(); don't re-run DDL on every
@@ -99,9 +160,52 @@ class DataLogger:
         conn = sqlite3.connect(self.db_path, timeout=5.0)
         try:
             conn.executescript(SCHEMA.format(columns=cols_schema()))
+            conn.executescript(
+                ROLLUP_SCHEMA.format(columns=",\n    ".join(_rollup_cols()))
+            )
             conn.execute("PRAGMA journal_mode = WAL")
             conn.execute("PRAGMA synchronous = NORMAL")
             conn.commit()
+        finally:
+            conn.close()
+
+    # -- 1-minute rollup maintenance -----------------------------------
+    def _rollup_refresh(self, conn, start_ts, end_ts):
+        """Rebuild rollup rows covering [start_ts, end_ts)."""
+        conn.execute(self._rollup_sql, (float(start_ts), float(end_ts)))
+
+    def _rollup_minute(self, conn, ts_unix):
+        """Rebuild the rollup row for the minute containing `ts_unix`."""
+        minute = int(ts_unix // 60) * 60
+        self._rollup_refresh(conn, minute, minute + 60)
+
+    def _backfill_rollup(self, chunk_seconds=86400.0):
+        """Bring the rollup table up to date with the raw table.
+
+        Runs once at startup and only covers the range after the newest
+        existing rollup minute, so a restart costs a fraction of a second in
+        steady state (a from-scratch build takes a couple of seconds for the
+        current archive and happens in day-sized commits).
+        """
+        conn = self._connect()
+        try:
+            lo, hi = self.min_max_time()
+            if lo is None:
+                return
+            have = conn.execute(
+                f"SELECT bucket_ts FROM {ROLLUP_TABLE} "
+                "ORDER BY bucket_ts DESC LIMIT 1"
+            ).fetchone()
+            start = (float(have[0]) if have is not None
+                     else float(int(lo // 60) * 60))
+            end = float(hi) + 1.0
+            while start < end:
+                stop = min(start + chunk_seconds, end)
+                self._rollup_refresh(conn, start, stop)
+                conn.commit()
+                start = stop
+        except Exception as exc:
+            print(f"[data_logger] rollup backfill failed: {exc}")
         finally:
             conn.close()
 
@@ -132,6 +236,14 @@ class DataLogger:
         conn = self._connect()
         try:
             self._insert(conn, row)
+            # Keep the rollup in lock-step with the raw row so wide History
+            # windows never have to fall back to scanning the raw table.
+            try:
+                self._rollup_minute(conn, now)
+            except Exception as exc:
+                if not self._rollup_warned:
+                    self._rollup_warned = True
+                    print(f"[data_logger] rollup update failed: {exc}")
             conn.commit()
             with self._lock:
                 self._last_row_count += 1
@@ -151,6 +263,10 @@ class DataLogger:
 
     def start(self):
         self._init_db()
+        # Build/catch up the rollup before the API can serve History requests
+        # (a from-scratch build is a couple of seconds for the current archive;
+        # afterwards it only covers the minutes logged while we were down).
+        self._backfill_rollup()
         if self._thread is not None and self._thread.is_alive():
             return
         self._thread = threading.Thread(
@@ -324,56 +440,138 @@ class DataLogger:
         conn = self._connect()
         try:
             if start_unix is None or end_unix is None:
-                lo, hi = conn.execute(
-                    "SELECT MIN(ts_unix), MAX(ts_unix) FROM readings"
+                # ORDER BY + LIMIT lets SQLite use the ts index for both ends;
+                # MIN() and MAX() together force a full scan of the index.
+                lo = conn.execute(
+                    "SELECT ts_unix FROM readings ORDER BY ts_unix ASC LIMIT 1"
                 ).fetchone()
-                if lo is None:
+                hi = conn.execute(
+                    "SELECT ts_unix FROM readings ORDER BY ts_unix DESC LIMIT 1"
+                ).fetchone()
+                if not lo or not hi:
                     return []
                 if start_unix is None:
-                    start_unix = lo
+                    start_unix = lo[0]
                 if end_unix is None:
-                    end_unix = hi
+                    end_unix = hi[0]
 
             span = float(end_unix) - float(start_unix)
             if span <= 0:
                 span = 1.0
             width = span / buckets
 
-            cols = [c for _, c in FIELDS]
-            avg_cols = ", ".join(f"AVG({c}) AS {c}" for c in cols)
-            # grid_seconds = connected fraction x the time actually covered by
-            # the bucket's samples (span + one sample interval), so short or
-            # partial buckets are not credited a full nominal width.
-            coverage = (
-                "(MAX(ts_unix) - MIN(ts_unix)) * "
-                "(CASE WHEN COUNT(*) > 1 THEN COUNT(*) * 1.0 / (COUNT(*) - 1) "
-                "ELSE 0 END)"
-            )
-            sql = (
-                "SELECT MIN(ts_unix) AS bucket_ts, "
-                "COUNT(*) AS samples, "
-                f"AVG(CASE WHEN grid_voltage >= 50 THEN 1.0 ELSE 0.0 END) * {coverage} "
-                "AS grid_seconds, "
-                "? AS bucket_width, "
-                f"{avg_cols}, MAX(pv_power) AS pv_power_max "
-                "FROM readings "
-                "WHERE ts_unix >= ? AND ts_unix <= ? "
-                "GROUP BY MIN(CAST((ts_unix - ?) / ? AS INTEGER), ?) "
-                "ORDER BY bucket_ts"
-            )
-            cur = conn.execute(
-                sql, (width, start_unix, end_unix, start_unix, width, buckets - 1)
-            )
-            names = ["bucket_ts", "samples", "grid_seconds", "bucket_width",
-                     *cols, "pv_power_max"]
-            rows = []
-            for r in cur.fetchall():
-                row = dict(zip(names, r))
-                row["ts_unix"] = row["bucket_ts"]
-                rows.append(row)
+            if width >= ROLLUP_MIN_BUCKET and self._rollup_ready(
+                    conn, start_unix, end_unix):
+                rows = self._buckets_from_rollup(
+                    conn, start_unix, end_unix, buckets, width)
+            else:
+                rows = self._buckets_from_raw(
+                    conn, start_unix, end_unix, buckets, width)
             return rows
         finally:
             conn.close()
+
+    def _rollup_ready(self, conn, start_unix, end_unix):
+        """True when the rollup table covers the parts of the window that
+        actually contain samples (so it can replace a raw scan)."""
+        try:
+            r_lo = conn.execute(
+                f"SELECT bucket_ts FROM {ROLLUP_TABLE} "
+                "ORDER BY bucket_ts ASC LIMIT 1"
+            ).fetchone()
+            r_hi = conn.execute(
+                f"SELECT bucket_ts FROM {ROLLUP_TABLE} "
+                "ORDER BY bucket_ts DESC LIMIT 1"
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return False
+        if not r_lo or not r_hi:
+            return False
+        # ORDER BY + LIMIT keeps these O(log n); MIN() and MAX() together make
+        # SQLite scan the whole table.
+        lo = conn.execute(
+            "SELECT ts_unix FROM readings ORDER BY ts_unix ASC LIMIT 1"
+        ).fetchone()
+        hi = conn.execute(
+            "SELECT ts_unix FROM readings ORDER BY ts_unix DESC LIMIT 1"
+        ).fetchone()
+        if not lo or not hi:
+            return False
+        # A minute of slack absorbs the partial minute at either edge.
+        want_lo = max(float(start_unix), float(lo[0]))
+        want_hi = min(float(end_unix), float(hi[0]))
+        if want_hi <= want_lo:
+            return True
+        return r_lo[0] <= want_lo + 60.0 and r_hi[0] >= want_hi - 180.0
+
+    def _buckets_from_rollup(self, conn, start_unix, end_unix, buckets, width):
+        cols = [c for _, c in FIELDS]
+        avg_cols = ", ".join(
+            f"SUM({c}_sum) / NULLIF(SUM({c}_n), 0) AS {c}" for c in cols
+        )
+        # Whole minutes only: the first/last minute of the window is included
+        # in full (at most 59 extra seconds at each edge).
+        r_start = float(int(float(start_unix) // 60) * 60)
+        r_end = float(int(float(end_unix) // 60) * 60)
+        sql = (
+            "SELECT MIN(r.ts_first) AS bucket_ts, "
+            "SUM(r.samples) AS samples, "
+            "SUM(r.grid_seconds) AS grid_seconds, "
+            "? AS bucket_width, "
+            f"{avg_cols}, MAX(r.pv_power_max) AS pv_power_max "
+            f"FROM {ROLLUP_TABLE} r "
+            "WHERE r.bucket_ts >= ? AND r.bucket_ts <= ? "
+            # A rollup row covers a whole minute, so assign it by the minute's
+            # midpoint: that halves the worst-case bucket-edge shift.
+            "GROUP BY MIN(CAST((r.bucket_ts + 30 - ?) / ? AS INTEGER), ?) "
+            "ORDER BY 1"
+        )
+        cur = conn.execute(
+            sql, (width, r_start, r_end, float(start_unix), width, buckets - 1)
+        )
+        names = ["bucket_ts", "samples", "grid_seconds", "bucket_width",
+                 *cols, "pv_power_max"]
+        rows = []
+        for r in cur.fetchall():
+            row = dict(zip(names, r))
+            row["ts_unix"] = row["bucket_ts"]
+            rows.append(row)
+        return rows
+
+    def _buckets_from_raw(self, conn, start_unix, end_unix, buckets, width):
+        cols = [c for _, c in FIELDS]
+        avg_cols = ", ".join(f"AVG({c}) AS {c}" for c in cols)
+        # grid_seconds = connected fraction x the time actually covered by
+        # the bucket's samples (span + one sample interval), so short or
+        # partial buckets are not credited a full nominal width.
+        coverage = (
+            "(MAX(ts_unix) - MIN(ts_unix)) * "
+            "(CASE WHEN COUNT(*) > 1 THEN COUNT(*) * 1.0 / (COUNT(*) - 1) "
+            "ELSE 0 END)"
+        )
+        sql = (
+            "SELECT MIN(ts_unix) AS bucket_ts, "
+            "COUNT(*) AS samples, "
+            f"AVG(CASE WHEN grid_voltage >= 50 THEN 1.0 ELSE 0.0 END) * {coverage} "
+            "AS grid_seconds, "
+            "? AS bucket_width, "
+            f"{avg_cols}, MAX(pv_power) AS pv_power_max "
+            "FROM readings "
+            "WHERE ts_unix >= ? AND ts_unix <= ? "
+            "GROUP BY MIN(CAST((ts_unix - ?) / ? AS INTEGER), ?) "
+            "ORDER BY bucket_ts"
+        )
+        cur = conn.execute(
+            sql, (width, start_unix, end_unix, start_unix, width, buckets - 1)
+        )
+        names = ["bucket_ts", "samples", "grid_seconds", "bucket_width",
+                 *cols, "pv_power_max"]
+        rows = []
+        for r in cur.fetchall():
+            row = dict(zip(names, r))
+            row["ts_unix"] = row["bucket_ts"]
+            rows.append(row)
+        return rows
 
     def estimate_battery_capacity(self, max_gap=120.0, step_soc=2.0):
         """Estimate the battery pack capacity (kWh) from recorded history.
@@ -444,8 +642,16 @@ class DataLogger:
         """Return (first_ts, last_ts) recorded in the database, or None."""
         conn = self._connect()
         try:
-            cur = conn.execute("SELECT MIN(ts_unix), MAX(ts_unix) FROM readings")
-            return cur.fetchone()
+            # Two indexed lookups; MIN()+MAX() in one query scans the index.
+            lo = conn.execute(
+                "SELECT ts_unix FROM readings ORDER BY ts_unix ASC LIMIT 1"
+            ).fetchone()
+            hi = conn.execute(
+                "SELECT ts_unix FROM readings ORDER BY ts_unix DESC LIMIT 1"
+            ).fetchone()
+            if not lo or not hi:
+                return (None, None)
+            return (lo[0], hi[0])
         finally:
             conn.close()
 

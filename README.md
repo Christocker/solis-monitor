@@ -189,6 +189,25 @@ This function is part of `supabase/schema.sql`. If the History page shows
 **"Full history needs supabase/schema.sql (history_buckets)"**, run that
 file once in the Supabase SQL Editor (it is idempotent and safe to re-run).
 
+### Fast history (recommended)
+
+Aggregating raw rows is slow: a month is ~1.3M rows, so a wide History window
+used to need dozens of sequential chunked requests (tens of seconds). Run
+`supabase/rollup.sql` once in the SQL Editor to add a per-minute rollup table
+(`readings_1m`) plus `history_buckets_fast()`. It backfills the existing
+archive, a trigger keeps the rollup current on every new reading, and the
+website automatically uses it when present:
+
+* one request for the whole window instead of ~1 call per day,
+* a month-range chart in a few hundred milliseconds,
+* narrow windows (buckets under 15 minutes) still read raw rows for exactness,
+* if the file has not been run, the site keeps using `history_buckets`
+  exactly as before.
+
+The local Flask dashboard has the same rollup built in (`readings_1m` inside
+`solis_history.db`), maintained by the logger and backfilled at startup, so
+wide local History windows are equally fast.
+
 > **Storage note:** raw 2 s data is ~200 MB/month. The Supabase Free tier
 > includes 500 MB, so the database fills in roughly two months. Monitor
 > Database size in the Supabase dashboard, and either upgrade the plan or
@@ -263,6 +282,7 @@ power data is available:
 | `cloud_sync.py` | Laptop side: push readings to Supabase (every 2s) |
 | `run_cloud_sync.bat` | Launcher for cloud_sync.py |
 | `supabase/schema.sql` | Supabase tables + RLS policies (run in SQL editor) |
+| `supabase/rollup.sql` | Supabase 1-minute rollup + `history_buckets_fast` (run once) |
 | `web/` | **Vercel static site** (reads from Supabase) |
 | `web/config.js` | Supabase URL + anon key for the hosted site |
 | `dashboard_app/config.py` | Connection + app settings |

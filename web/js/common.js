@@ -115,6 +115,9 @@ const HISTORY_MAX_CALLS = 200;
 // statement budget reliably tolerates.
 const HISTORY_MAX_CHUNKS = 160;
 let _rpcCalls = 0;
+// Whether `history_buckets_fast` (supabase/rollup.sql) is installed:
+// null = untried, true = working, false = not installed (use raw chunks).
+let _fastRpcSupported = null;
 
 // Cache merged bucket results for a window so revisiting a past window (or
 // re-opening "All") is instant instead of re-running the whole chunked scan.
@@ -170,6 +173,26 @@ async function fetchHistoryBuckets(startUnix, endUnix, buckets, onProgress) {
     }
 
     const span = e - s;
+    // One pre-aggregated call covers the whole window when the fast RPC is
+    // installed (supabase/rollup.sql), no chunking and no raw scan. If it is
+    // missing or fails, fall through to the chunked raw aggregation below.
+    if (_fastRpcSupported !== false) {
+        try {
+            const rows = await historyBucketsRpc(
+                s, e, buckets, "history_buckets_fast");
+            _fastRpcSupported = true;
+            _histCacheSet(cacheKey, rows);
+            if (onProgress) onProgress(1, 1);
+            return rows;
+        } catch (err) {
+            if (err.fastUnavailable) {
+                _fastRpcSupported = false;   // not installed: don't retry
+            } else if (!err.retryable) {
+                throw err;                   // real error (auth/bad request)
+            }
+            // Retryable (server-side) failure: use the raw chunked path.
+        }
+    }
     // Small ranges keep daily chunks; wide ones grow the chunk so the total
     // call count stays under the budget (and the function's 25 s timeout).
     const chunkSeconds = Math.max(HISTORY_CHUNK_SECONDS, span / HISTORY_MAX_CHUNKS);
@@ -239,9 +262,10 @@ async function historyBucketsCall(startUnix, endUnix, buckets) {
     }
 }
 
-async function historyBucketsRpc(startUnix, endUnix, buckets) {
+async function historyBucketsRpc(startUnix, endUnix, buckets, fn) {
+    const name = fn || "history_buckets";
     const body = { p_start: startUnix, p_end: endUnix, p_buckets: buckets };
-    const res = await supabaseFetch(SUPABASE_URL + "/rest/v1/rpc/history_buckets", {
+    const res = await supabaseFetch(SUPABASE_URL + "/rest/v1/rpc/" + name, {
         method: "POST",
         headers: supabaseHeaders(),
         body: JSON.stringify(body),
@@ -250,6 +274,7 @@ async function historyBucketsRpc(startUnix, endUnix, buckets) {
         const err = new Error("Supabase RPC HTTP " + res.status);
         if (res.status === 404) {
             err.rpcUnavailable = true;   // function not installed
+            if (name === "history_buckets_fast") err.fastUnavailable = true;
         } else if (res.status >= 500) {
             err.retryable = true;        // server timeout / overload
         }
