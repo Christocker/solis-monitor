@@ -232,6 +232,12 @@ let historyBounds = null;
 const LIVE_EDGE_SECONDS = 60;
 // Never zoom in closer than one minute (the logger samples every ~2 s).
 const TIMELINE_MIN_SPAN = 60;
+// >0 while a window is being dragged (timeline or chart). Preview loads then
+// animate instantly and must not snap the overlay back to a stale range.
+let windowDragActive = 0;
+
+function beginWindowDrag() { windowDragActive += 1; }
+function endWindowDrag() { windowDragActive = Math.max(0, windowDragActive - 1); }
 
 const VIEWS = {
     seconds: { label: "Seconds", window: 600,      points: 300, raw: true },     // 10 min @ 2s
@@ -448,7 +454,7 @@ function renderCharts(rows, labelMode, points) {
             chart.data.datasets[0].borderColor = col;
             chart.data.datasets[0].backgroundColor = col + "22";
         }
-        chart.update();
+        chart.update(windowDragActive ? "none" : undefined);
     }
 
     const ov = charts["chart-overview"];
@@ -462,11 +468,43 @@ function renderCharts(rows, labelMode, points) {
         ov.data.datasets[1].data = aLoad.data;
         ov.data.datasets[2].data = aBatt.data;
         ov.data.datasets[3].data = aSoc.data;
-        ov.update();
+        ov.update(windowDragActive ? "none" : undefined);
     }
 }
 
 let loadToken = 0;
+let loadInFlight = false;
+let loadQueued = false;
+let previewTimer = null;
+// Last range that was fetched, so a drag release right after a preview does
+// not fetch the identical slice twice.
+let lastLoad = { key: null, at: 0 };
+
+// Reload shortly after the last change (dragging, editing the time field) so
+// the charts follow the window without firing a request per pixel.
+function schedulePreviewLoad(delay) {
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+        previewTimer = null;
+        loadHistory();
+    }, delay == null ? 220 : delay);
+}
+
+async function loadHistory() {
+    // Single-flight: coalesce bursts of window edits into one follow-up load
+    // instead of stacking overlapping history queries.
+    if (loadInFlight) { loadQueued = true; return; }
+    loadInFlight = true;
+    try {
+        await loadHistoryNow();
+    } finally {
+        loadInFlight = false;
+        if (loadQueued) {
+            loadQueued = false;
+            schedulePreviewLoad(60);
+        }
+    }
+}
 
 // How to query a window: raw samples for short spans (full resolution),
 // server-side buckets for everything longer.
@@ -480,17 +518,19 @@ function planForRange(rng, view) {
     return { raw: false, limit: 10000, buckets: span >= 90 * 86400 ? 900 : 480 };
 }
 
-async function loadHistory() {
+async function loadHistoryNow() {
     const token = ++loadToken;
     const viewKey = currentView;          // capture the view this load is for
     const view = VIEWS[viewKey];
     const statusEl = document.getElementById("history-status");
-    statusEl.textContent = "Loading...";
     const rng = viewRange(viewKey);
     const span = rangeSpan(rng);
     const plan = planForRange(rng, view);
     const points = view.points;
-    updateTimeNav(rng);
+    const loadKey = [rng.start, rng.end, viewKey, plan.raw, plan.limit, plan.buckets].join("|");
+    if (loadKey === lastLoad.key && Date.now() - lastLoad.at < 1500) return;
+    statusEl.textContent = "Loading...";
+    if (!windowDragActive) updateTimeNav(rng);
     const onProgress = plan.raw ? null : (done, total) => {
         if (token === loadToken) statusEl.textContent = "Loading " + done + "/" + total + "...";
     };
@@ -498,6 +538,7 @@ async function loadHistory() {
         const rows = plan.raw
             ? await fetchReadings(rng.start, rng.end, plan.limit)
             : await fetchHistoryBuckets(rng.start, rng.end, plan.buckets, onProgress);
+        lastLoad = { key: loadKey, at: Date.now() };
         if (token !== loadToken) return;  // superseded by a newer request
         for (const r of rows) {
             r.load_power = (r.house_load == null && r.backup_load == null)
@@ -717,9 +758,26 @@ function shiftWindow(dir) {
 }
 
 // Move the window so it ends at `t`, keeping its current length.
-function setWindowEnd(t) {
+function setWindowEnd(t, defer) {
     const span = rangeSpan(viewRange(currentView)) || VIEWS.minutes.window;
-    applyWindow(t - span, t);
+    applyWindow(t - span, t, { commit: false });
+    updateTimeNav();
+    syncViewButtons();
+    writeState();
+    if (defer) schedulePreviewLoad(300);
+    else loadHistory();
+}
+
+// Parse the datetime-local field; ignore partial/out-of-range values while the
+// user is still typing so the charts never jump to year 0002.
+function parseInputTime(value) {
+    if (!value || value.length < 16) return null;
+    const t = Math.floor(new Date(value).getTime() / 1000);
+    if (isNaN(t)) return null;
+    const b = timelineBounds();
+    if (t > Date.now() / 1000 + 86400) return null;
+    if (b && t < b.min - 86400) return null;
+    return t;
 }
 
 function setupTimeNav() {
@@ -741,11 +799,19 @@ function setupTimeNav() {
         updateTimeNav();
         loadHistory();
     });
-    if (input) input.addEventListener("change", () => {
-        if (!input.value) return;
-        const t = Math.floor(new Date(input.value).getTime() / 1000);
-        if (!isNaN(t)) setWindowEnd(t);
-    });
+    if (input) {
+        const commit = () => {
+            const t = parseInputTime(input.value);
+            if (t != null) setWindowEnd(t, false);
+        };
+        input.addEventListener("change", commit);
+        // Date/time pickers fire `input` for each segment change: follow the
+        // field live (debounced) instead of waiting for Enter/blur.
+        input.addEventListener("input", () => {
+            const t = parseInputTime(input.value);
+            if (t != null) setWindowEnd(t, true);
+        });
+    }
     updateTimeNav();
 }
 
@@ -891,6 +957,7 @@ function timelinePointerDown(e) {
     tlDrag = { mode: mode, x: e.clientX, start: start, end: end, moved: false, jumped: jumped };
     try { track.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     track.classList.add("dragging");
+    beginWindowDrag();
     e.preventDefault();
 }
 
@@ -915,6 +982,7 @@ function timelinePointerMove(e) {
     tlDrag.moved = tlDrag.moved || Math.abs(dx) > 0;
     applyWindow(s, en, { commit: false });
     updateTimeNav();
+    schedulePreviewLoad();
     e.preventDefault();
 }
 
@@ -927,6 +995,7 @@ function timelinePointerUp(e) {
         track.classList.remove("dragging");
         try { track.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     }
+    endWindowDrag();
     if (committed && customWindow) applyWindow(customWindow.start, customWindow.end);
 }
 
@@ -966,6 +1035,7 @@ function enableChartPan(canvasId) {
         if (r.start == null || r.end == null) return;      // "All" has no window
         drag = { x: e.clientX, start: r.start, end: r.end, moved: false };
         try { cv.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        beginWindowDrag();
     });
     cv.addEventListener("pointermove", (e) => {
         if (!drag) return;
@@ -977,6 +1047,7 @@ function enableChartPan(canvasId) {
         const dt = -(dx / Math.max(1, cv.clientWidth)) * span;
         applyWindow(drag.start + dt, drag.end + dt, { commit: false });
         updateTimeNav();
+        schedulePreviewLoad();
         e.preventDefault();
     });
     const finish = (e) => {
@@ -985,6 +1056,7 @@ function enableChartPan(canvasId) {
         drag = null;
         cv.classList.remove("panning");
         try { cv.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        endWindowDrag();
         if (moved && customWindow) applyWindow(customWindow.start, customWindow.end);
     };
     cv.addEventListener("pointerup", finish);
