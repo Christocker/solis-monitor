@@ -27,6 +27,12 @@ from . import normalize
 from . import data_logger
 from . import cloud_sync
 from . import alerts
+from . import sonoff
+from . import access
+
+# Grid-control relay (SONOFF MINIR4 through Home Assistant). The SOC provider
+# is wired up in create_app() so this module stays import-safe.
+sonoff_controller = sonoff.SonoffController()
 
 
 # --- Today's energy totals (integrated from recorded readings) ---
@@ -254,7 +260,21 @@ def _current_snapshot():
         "efficiency": INVERTER_EFFICIENCY,
     }
     snapshot["alerts"] = alerts.active_alerts()
+    snapshot["sonoff"] = sonoff_controller.status()
     return snapshot
+
+
+def _sonoff_soc():
+    """(soc %, data timestamp) for the relay controller.
+
+    Uses the same snapshot the dashboard shows, so the relay can never be
+    driven by a value the user isn't seeing.
+    """
+    snapshot = _current_snapshot()
+    soc_field = (snapshot.get("battery") or {}).get("soc") or {}
+    soc = soc_field.get("value") if soc_field.get("state") == "available" else None
+    data_ts = (snapshot.get("system") or {}).get("data_ts_unix")
+    return soc, data_ts
 
 
 def _current_diagnostics():
@@ -280,6 +300,10 @@ def create_app():
     app = Flask(__name__)
     app.config["DEMO_MODE"] = DEMO_MODE
 
+    # LAN access gate (MAC allowlist + password fallback), registered before
+    # any route so it covers every page and API call.
+    access.init_app(app)
+
     @app.errorhandler(Exception)
     def _handle_error(e):
         """Always answer API/browser errors as JSON, never a bare HTML 500."""
@@ -303,6 +327,26 @@ def create_app():
     @app.route("/api/status")
     def api_status():
         return jsonify(_current_snapshot())
+
+    @app.route("/api/sonoff")
+    def api_sonoff():
+        return jsonify(sonoff_controller.status())
+
+    @app.route("/api/sonoff/toggle", methods=["POST"])
+    def api_sonoff_toggle():
+        """Manual relay toggle. Holds automation off for a while afterwards."""
+        if not sonoff_controller.configured:
+            return jsonify({"error": "grid control is not configured"}), 503
+        current = sonoff_controller.current_state(force=True)
+        if current not in ("on", "off"):
+            return jsonify({"error": "relay unreachable",
+                            "detail": sonoff_controller.status().get("error")}), 502
+        return jsonify(sonoff_controller.manual(current != "on"))
+
+    @app.route("/api/sonoff/auto", methods=["POST"])
+    def api_sonoff_auto():
+        body = request.get_json(silent=True) or {}
+        return jsonify(sonoff_controller.set_auto(bool(body.get("enabled", True))))
 
     @app.route("/api/diagnostics")
     def api_diagnostics():
@@ -430,5 +474,8 @@ def create_app():
         cloud_sync.start_syncer(modbus_layer.reader)
         alerts.start_alerts()
         start_lifetime_worker()
+        # Grid-control relay: only in real mode, and only when configured.
+        sonoff_controller.set_soc_provider(_sonoff_soc)
+        sonoff_controller.start()
 
     return app

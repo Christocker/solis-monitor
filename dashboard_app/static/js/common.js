@@ -29,8 +29,38 @@ async function fetchJSON(url, timeoutMs) {
     const timer = setTimeout(() => controller.abort(), timeoutMs || 5000);
     try {
         const res = await fetch(url, { signal: controller.signal });
-        if (!res.ok) throw new Error("HTTP " + res.status);
+        if (!res.ok) {
+            const err = new Error("HTTP " + res.status);
+            err.status = res.status;
+            throw err;
+        }
         return await res.json();
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+// POST JSON with a timeout. Non-2xx responses become Errors carrying the
+// server's message (so the UI can show why a switch command failed).
+async function postJSON(url, body, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs || 10000);
+    try {
+        const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body || {}),
+            signal: controller.signal,
+        });
+        let data = null;
+        try { data = await res.json(); } catch (e) { data = null; }
+        if (!res.ok) {
+            const err = new Error((data && (data.detail || data.error)) || ("HTTP " + res.status));
+            err.status = res.status;
+            err.data = data;
+            throw err;
+        }
+        return data;
     } finally {
         clearTimeout(timer);
     }

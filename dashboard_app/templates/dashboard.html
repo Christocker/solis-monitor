@@ -119,6 +119,30 @@
             <div class="mini"><span class="mini-label">House Load</span><div><span class="mini-value" id="house-load">--</span><span class="mini-unit">W</span></div></div>
             <div class="mini"><span class="mini-label">Backup Load</span><div><span class="mini-value" id="backup-load">--</span><span class="mini-unit">W</span></div></div>
         </div>
+    <section class="card" data-accent="control" id="sonoff-card" hidden>
+        <header class="card-header">
+            <h2>Grid Control</h2>
+            <span class="card-icon control-icon"><svg aria-hidden="true" focusable="false"><use href="#i-zap"/></svg></span>
+        </header>
+        <div class="sonoff-main">
+            <button id="sonoff-btn" class="sonoff-btn" type="button" aria-pressed="false"
+                    aria-label="Toggle grid-control relay">
+                <span class="sonoff-dot" aria-hidden="true"></span>
+                <span id="sonoff-label">--</span>
+            </button>
+            <div class="sonoff-meta">
+                <div class="sonoff-row"><span>Relay</span><b id="sonoff-name">--</b></div>
+                <div class="sonoff-row"><span>Battery SOC</span><b id="sonoff-soc">--</b></div>
+                <div class="sonoff-row"><span>Rule</span><b id="sonoff-rule">ON &le; -- &middot; OFF &ge; --</b></div>
+            </div>
+        </div>
+        <div class="sonoff-foot">
+            <label class="sonoff-auto" for="sonoff-auto-input">
+                <input type="checkbox" id="sonoff-auto-input" checked>
+                <span>Auto</span>
+            </label>
+            <span class="sonoff-last" id="sonoff-last">No action yet</span>
+        </div>
     </section>
 </div>
 

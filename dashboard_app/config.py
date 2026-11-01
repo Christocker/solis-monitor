@@ -8,6 +8,34 @@ can remain fully independent.
 
 import os
 
+
+def _load_env_file():
+    """Load KEY=VALUE pairs from the project .env (if present).
+
+    Dependency-free, and values already exported in the environment win, so a
+    systemd unit or a shell export can still override the file.
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    for path in (os.path.join(here, "..", ".env"), os.path.join(here, ".env")):
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, _, value = line.partition("=")
+                    os.environ.setdefault(
+                        key.strip(), value.strip().strip('"').strip("'")
+                    )
+        except OSError:
+            pass
+        return
+
+
+_load_env_file()
+
 # Modbus TCP connection to the S2-WL-ST data logger.
 # The logger gets its address over DHCP, so it can move. Override without
 # editing code by setting SOLIS_HOST / SOLIS_PORT in the environment
@@ -70,6 +98,34 @@ INVERTER_EFFICIENCY = float(os.environ.get("INVERTER_EFFICIENCY", "0.93"))
 # Web server
 SERVER_HOST = "0.0.0.0"     # all interfaces so other devices on the LAN can connect
 SERVER_PORT = 8080
+
+# --- Grid-control relay (SONOFF MINIR4 through Home Assistant) --------------
+# The relay switches the grid charger. It is driven from the inverter's own
+# battery SOC (the same value the dashboard shows), not a second SOC source.
+SONOFF_ENABLED = os.environ.get("SONOFF_ENABLED", "1").lower() not in (
+    "0", "false", "no", "off",
+)
+SONOFF_HA_URL = os.environ.get("SONOFF_HA_URL", "http://127.0.0.1:8123").rstrip("/")
+SONOFF_HA_TOKEN = os.environ.get("SONOFF_HA_TOKEN", "").strip()
+SONOFF_ENTITY = os.environ.get(
+    "SONOFF_ENTITY", "switch.minir4_solis_grid_control_sonoff_1002990982_1"
+).strip()
+SONOFF_ON_SOC = float(os.environ.get("SONOFF_ON_SOC", "8"))     # turn ON at or below
+SONOFF_OFF_SOC = float(os.environ.get("SONOFF_OFF_SOC", "10"))  # turn OFF at or above
+SONOFF_MANUAL_HOLD_S = float(os.environ.get("SONOFF_MANUAL_HOLD_S", "1800"))
+SONOFF_EVAL_INTERVAL = float(os.environ.get("SONOFF_EVAL_INTERVAL", "5"))
+SONOFF_MIN_ACTION_GAP = float(os.environ.get("SONOFF_MIN_ACTION_GAP", "60"))
+SONOFF_STALE_S = float(os.environ.get("SONOFF_STALE_S", "60"))
+
+# --- Dashboard access ------------------------------------------------------
+# MAC allowlist: listed devices get straight in; anything else must enter the
+# password. Format: aa:bb:cc:dd:ee:ff, comma separated. Empty = password for
+# everyone (loopback and this machine's own addresses are always allowed).
+DASHBOARD_ALLOWED_MACS = os.environ.get("DASHBOARD_ALLOWED_MACS", "").strip()
+DASHBOARD_PASSWORD = os.environ.get("DASHBOARD_PASSWORD", "").strip()
+DASHBOARD_SESSION_DAYS = int(os.environ.get("DASHBOARD_SESSION_DAYS", "30"))
+DASHBOARD_LOGIN_MAX_TRIES = int(os.environ.get("DASHBOARD_LOGIN_MAX_TRIES", "5"))
+DASHBOARD_LOGIN_WINDOW_S = float(os.environ.get("DASHBOARD_LOGIN_WINDOW_S", "300"))
 
 # Optional DEMO mode. When True, the API serves clearly-labeled mock data
 # instead of touching the inverter. NEVER enable this for production.

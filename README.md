@@ -229,6 +229,39 @@ then the site simply shows `—` for the heartbeat.
 The website ships a manifest and a service worker, so it can be **installed**
 to a phone/desktop home screen (offline shell + last-known reading).
 
+## Grid control relay (SONOFF via Home Assistant)
+
+The relay feeding the grid charger is switched from the inverter's **own**
+battery SOC (the value the dashboard shows, not a second SOC source):
+
+| Condition | Action |
+|-----------|--------|
+| SOC <= `SONOFF_ON_SOC` (8 %) and relay OFF | turn ON |
+| SOC >= `SONOFF_OFF_SOC` (10 %) and relay ON | turn OFF |
+| in between | hold position (hysteresis) |
+
+Safety rules: stale data (poller offline) means *no action*, never a blind
+switch; at least 60 s between relay actions; the dashboard button overrides
+automation for `SONOFF_MANUAL_HOLD_S` (30 min, then auto resumes).
+
+It drives the relay through Home Assistant, because the MINIR4 is paired
+there. Set a long-lived token in `.env` (`SONOFF_HA_TOKEN`) plus
+`SONOFF_ENTITY`. The button only exists on the local dashboard — the hosted
+Vercel site has no backend and cannot switch anything.
+
+## Access control (LAN)
+
+The local dashboard is gated by MAC allowlist with a password fallback:
+
+- `localhost` and this machine's own IPs always pass.
+- A client whose MAC is in `DASHBOARD_ALLOWED_MACS` passes.
+- Everything else (VPN, another subnet, a randomised phone MAC) gets the
+  password form at `/login`; API calls get `401 auth_required`.
+
+A MAC list is a convenience filter, not real security (MACs can be spoofed),
+so keep the password strong. The login page prints the detected MAC so it can
+be copied into the allowlist. The hosted site is unaffected.
+
 ## Architecture (4 layers)
 
 ```
@@ -291,6 +324,8 @@ power data is available:
 | `dashboard_app/normalize.py` | Layer 2: normalized snapshot |
 | `dashboard_app/api.py` | Layer 3: Flask API |
 | `dashboard_app/data_logger.py` | SQLite history recorder (background thread) |
+| `dashboard_app/sonoff.py` | Grid-control relay (SOC hysteresis via Home Assistant) |
+| `dashboard_app/access.py` | LAN gate: MAC allowlist + password fallback |
 | `dashboard_app/templates/` | Layer 4: HTML pages |
 | `dashboard_app/static/` | Layer 4: CSS + JS (incl. local Chart.js, works offline) |
 | `archive/` | Temporary Phase 1 discovery scripts |

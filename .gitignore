@@ -13,6 +13,8 @@ venv/
 
 # Secrets
 .env
+instance/
+sonoff_state.json
 
 # OS
 Thumbs.db

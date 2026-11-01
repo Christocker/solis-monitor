@@ -365,6 +365,107 @@ function set(id, text) {
     if (el) el.textContent = text;
 }
 
+/* ---- Grid-control relay (SONOFF MINIR4 via Home Assistant) ---- */
+let sonoffBusy = false;
+
+function sonoffClock(ts) {
+    if (!ts) return "--";
+    return new Date(ts * 1000).toLocaleTimeString([], {
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+}
+
+function updateSonoff(s) {
+    const card = document.getElementById("sonoff-card");
+    if (!card) return;                        // hosted build has no card
+    if (!s || !s.configured) { card.hidden = true; return; }
+    card.hidden = false;
+
+    const btn = document.getElementById("sonoff-btn");
+    const label = document.getElementById("sonoff-label");
+    const known = s.state === "on" || s.state === "off";
+    const on = s.state === "on";
+
+    if (btn) {
+        if (!sonoffBusy) btn.disabled = !known;
+        btn.dataset.unknown = known ? "false" : "true";
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.setAttribute("aria-label", on ? "Turn grid control off" : "Turn grid control on");
+    }
+    if (label) label.textContent = known ? (on ? "ON" : "OFF") : NORMAL_DASH;
+
+    const name = document.getElementById("sonoff-name");
+    if (name) {
+        name.textContent = s.name || "MINIR4";
+        name.title = s.entity || "";
+    }
+
+    const soc = document.getElementById("sonoff-soc");
+    if (soc) {
+        soc.textContent = s.soc == null ? NORMAL_DASH : Math.round(Number(s.soc)) + "%";
+    }
+
+    const rule = document.getElementById("sonoff-rule");
+    if (rule) {
+        rule.textContent = "ON \u2264 " + s.on_soc + "% \u00b7 OFF \u2265 " + s.off_soc + "%";
+    }
+
+    const auto = document.getElementById("sonoff-auto-input");
+    if (auto && document.activeElement !== auto) auto.checked = !!s.auto;
+
+    const last = document.getElementById("sonoff-last");
+    if (last) {
+        if (s.last_action && s.last_action.at) {
+            const a = s.last_action;
+            last.textContent = (a.action === "on" ? "On" : "Off") +
+                " \u00b7 " + sonoffClock(a.at) +
+                (a.soc != null ? " \u00b7 " + Math.round(a.soc) + "%" : "");
+            last.title = a.reason || "";
+        } else if (!s.auto) {
+            last.textContent = "Auto off";
+            last.title = "";
+        } else if (s.reachable === false) {
+            last.textContent = "Home Assistant unreachable";
+            last.title = s.error || "";
+        } else {
+            last.textContent = "Waiting for thresholds";
+            last.title = "";
+        }
+    }
+}
+
+async function sonoffManual() {
+    if (sonoffBusy) return;
+    sonoffBusy = true;
+    const btn = document.getElementById("sonoff-btn");
+    const last = document.getElementById("sonoff-last");
+    if (btn) btn.disabled = true;
+    try {
+        updateSonoff(await postJSON("/api/sonoff/toggle", {}, 15000));
+    } catch (err) {
+        if (err.status === 401) { window.location.href = "/login"; return; }
+        if (last) last.textContent = "Switch failed \u2014 " + err.message;
+    } finally {
+        sonoffBusy = false;
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function sonoffAuto(enabled) {
+    try {
+        updateSonoff(await postJSON("/api/sonoff/auto", { enabled: enabled }, 15000));
+    } catch (err) {
+        if (err.status === 401) window.location.href = "/login";
+    }
+}
+
+const sonoffBtn = document.getElementById("sonoff-btn");
+if (sonoffBtn) sonoffBtn.addEventListener("click", sonoffManual);
+const sonoffAutoInput = document.getElementById("sonoff-auto-input");
+if (sonoffAutoInput) {
+    sonoffAutoInput.addEventListener("change", () => sonoffAuto(sonoffAutoInput.checked));
+}
+
 let pollBusy = false;
 let anyError = false;
 async function poll() {
@@ -383,10 +484,15 @@ async function poll() {
         updateEnergy(snapshot.energy);
         updateLifetime(snapshot.energy);
         updateAlerts(snapshot.alerts);
+        updateSonoff(snapshot.sonoff);
         updateFlow(snapshot);
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);
     } catch (err) {
+        if (err.status === 401) {          // session expired / not signed in
+            window.location.href = "/login";
+            return;
+        }
         // Network/server error — show offline and clear the grid state too,
         // so a stale "GRID CONNECTED" is never shown next to CONNECTION LOST.
         anyError = true;
