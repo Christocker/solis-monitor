@@ -67,6 +67,12 @@ create policy relay_control_write on public.relay_control
 
 grant select, update on public.relay_control to authenticated;
 
+-- PostgREST roles need explicit table privileges; RLS only filters rows.
+-- The local monitor writes with the service_role key (it bypasses RLS, but
+-- still needs GRANT), otherwise every poll fails with 403.
+grant all on public.relay_control to service_role;
+grant all on public.relay_status  to service_role;
+
 -- ------------------------------------------------------------
 -- 3. Throttle: at most one accepted command per 3 seconds
 -- ------------------------------------------------------------
