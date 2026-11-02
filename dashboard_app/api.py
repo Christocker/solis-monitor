@@ -28,11 +28,13 @@ from . import data_logger
 from . import cloud_sync
 from . import alerts
 from . import sonoff
+from . import relay_cloud
 from . import access
 
 # Grid-control relay (SONOFF MINIR4 through Home Assistant). The SOC provider
 # is wired up in create_app() so this module stays import-safe.
 sonoff_controller = sonoff.SonoffController()
+relay_cloud_sync = relay_cloud.RelayCloud(sonoff_controller)
 
 
 # --- Today's energy totals (integrated from recorded readings) ---
@@ -477,5 +479,7 @@ def create_app():
         # Grid-control relay: only in real mode, and only when configured.
         sonoff_controller.set_soc_provider(_sonoff_soc)
         sonoff_controller.start()
+        # Website relay commands (Supabase queue -> HA), if Supabase is set up.
+        relay_cloud_sync.start()
 
     return app

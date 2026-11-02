@@ -357,6 +357,234 @@ async function getSyncStatus() {
     return _syncStatus;
 }
 
+/* ---- Grid-control relay (public site, through the Supabase queue) ---- */
+// The site cannot reach the inverter or Home Assistant, so the button writes
+// an intent to relay_control; the local monitor applies it and publishes
+// relay_status back, which this card displays.
+const RELAY_STATUS_URL = SUPABASE_URL + "/rest/v1/relay_status?id=eq.1&select=*";
+const RELAY_CONTROL_URL = SUPABASE_URL + "/rest/v1/relay_control?id=eq.1";
+const RELAY_AUTH_KEY = "solis:relayAuth";
+const RELAY_NAME = "MINIR4-Solis-Grid-Control";
+
+let relayStatus = null;
+let relayBusy = false;
+let relayPending = null;
+let relayFetched = 0;
+
+function relayAuth() {
+    try { return JSON.parse(localStorage.getItem(RELAY_AUTH_KEY) || "null"); }
+    catch (e) { return null; }
+}
+function relaySetAuth(auth) {
+    try {
+        if (auth) localStorage.setItem(RELAY_AUTH_KEY, JSON.stringify(auth));
+        else localStorage.removeItem(RELAY_AUTH_KEY);
+    } catch (e) { /* private mode: sign-in lasts for this page only */ }
+}
+
+async function relaySignIn(email, password) {
+    const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, password: password }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.access_token) {
+        throw new Error((data && (data.error_description || data.msg || data.error)) || "Sign in failed");
+    }
+    relaySetAuth({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: Date.now() + ((data.expires_in || 3600) * 1000) - 60000,
+    });
+    return data.access_token;
+}
+
+async function relayToken() {
+    const auth = relayAuth();
+    if (!auth) return null;
+    if (auth.expires_at && Date.now() < auth.expires_at) return auth.access_token;
+    if (!auth.refresh_token) { relaySetAuth(null); return null; }
+    const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: auth.refresh_token }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || !data.access_token) { relaySetAuth(null); return null; }
+    relaySetAuth({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token || auth.refresh_token,
+        expires_at: Date.now() + ((data.expires_in || 3600) * 1000) - 60000,
+    });
+    return data.access_token;
+}
+
+async function fetchRelayStatus(force) {
+    if (!force && Date.now() - relayFetched < 3000) return relayStatus;
+    try {
+        const res = await fetch(RELAY_STATUS_URL, {
+            headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY },
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const rows = await res.json();
+        relayStatus = (rows && rows[0]) || null;
+        relayFetched = Date.now();
+    } catch (e) {
+        // keep the last known state; the card shows how old it is
+    }
+    return relayStatus;
+}
+
+function relayClock(iso) {
+    if (!iso) return "--";
+    const d = new Date(iso);
+    if (isNaN(d)) return "--";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function showRelayLogin(show) {
+    const form = document.getElementById("sonoff-login");
+    if (!form) return;
+    form.hidden = !show;
+    if (show) {
+        const email = document.getElementById("sonoff-email");
+        if (email) email.focus();
+    }
+}
+
+function updateRelayUI() {
+    const card = document.getElementById("sonoff-card");
+    if (!card) return;
+    const s = relayStatus;
+    if (!s || (!s.state && !s.updated_at)) { card.hidden = true; return; }
+    card.hidden = false;
+
+    const btn = document.getElementById("sonoff-btn");
+    const label = document.getElementById("sonoff-label");
+    const known = s.state === "on" || s.state === "off";
+    const on = s.state === "on";
+
+    if (btn) {
+        btn.disabled = !known || relayBusy;
+        btn.dataset.unknown = known ? "false" : "true";
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        btn.setAttribute("aria-label", on ? "Turn grid control off" : "Turn grid control on");
+    }
+    if (label) label.textContent = known ? (on ? "ON" : "OFF") : NORMAL_DASH;
+
+    const soc = document.getElementById("sonoff-soc");
+    if (soc) soc.textContent = s.soc == null ? NORMAL_DASH : Math.round(Number(s.soc)) + "%";
+
+    const rule = document.getElementById("sonoff-rule");
+    if (rule) {
+        rule.textContent = "ON \u2264 " + (s.on_soc ?? "--") + "% \u00b7 OFF \u2265 " + (s.off_soc ?? "--") + "%";
+    }
+
+    const pill = document.getElementById("sonoff-auto-pill");
+    if (pill) {
+        pill.dataset.off = s.auto ? "false" : "true";
+        pill.textContent = s.auto ? "AUTO" : "MANUAL";
+    }
+
+    const ageSec = s.updated_at ? (Date.now() - Date.parse(s.updated_at)) / 1000 : null;
+    const last = document.getElementById("sonoff-last");
+    if (last) {
+        if (relayPending) {
+            last.textContent = "Sending " + relayPending.toUpperCase() + "\u2026";
+        } else if (ageSec != null && ageSec > 120) {
+            last.textContent = "Monitor offline \u00b7 " + relayClock(s.updated_at);
+        } else if (s.last_action && s.last_action.at) {
+            const a = s.last_action;
+            last.textContent = (a.action === "on" ? "On" : "Off") + " \u00b7 " + relayClock(new Date(a.at * 1000).toISOString()) +
+                (a.soc != null ? " \u00b7 " + Math.round(a.soc) + "%" : "");
+            last.title = a.reason || "";
+        } else {
+            last.textContent = s.auto ? "Waiting for thresholds" : "Auto off";
+            last.title = "";
+        }
+    }
+}
+
+async function relayToggle() {
+    if (relayBusy) return;
+    if (!relayStatus) return;
+
+    const token = await relayToken();
+    if (!token) { showRelayLogin(true); return; }
+
+    const want = relayStatus.state === "on" ? "off" : "on";
+    relayBusy = true;
+    relayPending = want;
+    updateRelayUI();
+
+    try {
+        const res = await fetch(RELAY_CONTROL_URL, {
+            method: "PATCH",
+            headers: {
+                apikey: SUPABASE_ANON_KEY,
+                Authorization: "Bearer " + token,
+                "Content-Type": "application/json",
+                Prefer: "return=minimal",
+            },
+            body: JSON.stringify({
+                desired_state: want,
+                requested_at: new Date().toISOString(),
+                requested_by: "web",
+            }),
+        });
+        if (res.status === 401) {
+            relaySetAuth(null);
+            showRelayLogin(true);
+            throw new Error("Sign in again");
+        }
+        if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text.includes("throttled")
+                ? "One command every 3 s \u2014 try again"
+                : "HTTP " + res.status);
+        }
+        // The monitor polls every ~2 s; wait for it to reflect the change.
+        for (let i = 0; i < 10; i++) {
+            await new Promise((r) => setTimeout(r, 1500));
+            const s = await fetchRelayStatus(true);
+            if (s && s.state === want) break;
+        }
+    } catch (err) {
+        const last = document.getElementById("sonoff-last");
+        if (last) last.textContent = "Failed \u2014 " + err.message;
+    } finally {
+        relayBusy = false;
+        relayPending = null;
+        relayFetched = 0;
+        await fetchRelayStatus(true);
+        updateRelayUI();
+    }
+}
+
+const relayBtn = document.getElementById("sonoff-btn");
+if (relayBtn) relayBtn.addEventListener("click", relayToggle);
+
+const relayLoginForm = document.getElementById("sonoff-login");
+if (relayLoginForm) {
+    relayLoginForm.addEventListener("submit", async (ev) => {
+        ev.preventDefault();
+        const err = document.getElementById("sonoff-login-err");
+        try {
+            await relaySignIn(
+                document.getElementById("sonoff-email").value.trim(),
+                document.getElementById("sonoff-pass").value,
+            );
+            if (err) err.textContent = "";
+            document.getElementById("sonoff-pass").value = "";
+            showRelayLogin(false);
+            relayToggle();                 // retry the action that asked for login
+        } catch (ex) {
+            if (err) err.textContent = ex.message;
+        }
+    });
+}
+
 let pollBusy = false;
 let anyError = false;
 async function poll() {
@@ -379,6 +607,9 @@ async function poll() {
         updateFlow(snapshot);
         updateGlobalStatus(snapshot);
         updateLastUpdate(snapshot);
+
+        // Relay state comes from the command queue (cached for 3 s inside).
+        fetchRelayStatus().then(updateRelayUI).catch(() => {});
 
         // Distinguish "laptop/cloud sync dead" from "inverter offline".
         const sync = await getSyncStatus();
@@ -567,6 +798,7 @@ if (runtimeInput) {
     });
 }
 
+fetchRelayStatus(true).then(updateRelayUI).catch(() => {});
 pollCycle();
 refreshEnergy();
 setInterval(refreshEnergy, 60000);

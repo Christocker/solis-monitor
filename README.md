@@ -249,6 +249,30 @@ there. Set a long-lived token in `.env` (`SONOFF_HA_TOKEN`) plus
 `SONOFF_ENTITY`. The button only exists on the local dashboard — the hosted
 Vercel site has no backend and cannot switch anything.
 
+## Public relay control (hosted website)
+
+The hosted site is static, so it cannot reach Home Assistant. Relay commands
+travel through Supabase instead:
+
+```
+website --PATCH--> relay_control --polled by--> local monitor --> HA
+website <--SELECT-- relay_status <--written by-- local monitor
+```
+
+- `supabase/relay.sql` creates both tables, RLS and a 3 s throttle. Run it
+  once in the SQL editor.
+- `relay_status` is public read (it mirrors the dashboard). `relay_control`
+  requires a signed-in Supabase Auth user, so anonymous visitors cannot
+  switch anything.
+- `dashboard_app/relay_cloud.py` polls every 2 s, applies the command through
+  the same `SonoffController.manual()` path as the button (30 min auto hold),
+  and publishes the result. Commands older than 5 minutes are dropped, never
+  replayed.
+- The website's login is a Supabase Auth email/password account created in
+  Authentication > Users; the token is kept in `localStorage` and refreshed.
+
+Latency is ~2-4 s (queue poll), not instant.
+
 ## Access control (LAN)
 
 The local dashboard is gated by MAC allowlist with a password fallback:
