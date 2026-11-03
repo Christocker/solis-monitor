@@ -110,6 +110,10 @@ grant select, insert, update, delete on public.system_info to service_role;
 --   POST /rest/v1/rpc/history_buckets   { "p_buckets": 480 }
 --   POST /rest/v1/rpc/history_buckets   { "p_start": 0, "p_end": 1e12, "p_buckets": 168 }
 
+-- Recreate from scratch: Postgres cannot change a function's OUT row type with
+-- CREATE OR REPLACE, so a changed column list needs an explicit DROP first.
+drop function if exists public.history_buckets(double precision, double precision, integer);
+
 create or replace function public.history_buckets(
     p_start double precision default null,
     p_end double precision default null,
@@ -119,7 +123,6 @@ returns table (
     bucket_ts double precision,
     samples bigint,
     grid_seconds double precision,
-    bucket_width double precision,
     pv_power double precision,
     pv1_voltage double precision,
     pv1_current double precision,
@@ -152,7 +155,6 @@ as $$
                       / ((bounds.e - bounds.s) / bounds.n)),
                 bounds.n - 1
             ) as bucket,
-            ((bounds.e - bounds.s) / bounds.n) as width,
             r.ts_unix,
             r.pv_power, r.pv1_voltage, r.pv1_current,
             r.pv2_voltage, r.pv2_current,
@@ -177,7 +179,6 @@ as $$
             * (case when count(*) > 1
                     then count(*)::double precision / (count(*) - 1)
                     else 0 end)                           as grid_seconds,
-        min(b.width)                                      as bucket_width,
         avg(b.pv_power)                                   as pv_power,
         avg(b.pv1_voltage)                                as pv1_voltage,
         avg(b.pv1_current)                                as pv1_current,
