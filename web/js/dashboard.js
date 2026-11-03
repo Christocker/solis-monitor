@@ -363,62 +363,12 @@ async function getSyncStatus() {
 // relay_status back, which this card displays.
 const RELAY_STATUS_URL = SUPABASE_URL + "/rest/v1/relay_status?id=eq.1&select=*";
 const RELAY_CONTROL_URL = SUPABASE_URL + "/rest/v1/relay_control?id=eq.1";
-const RELAY_AUTH_KEY = "solis:relayAuth";
 const RELAY_NAME = "MINIR4-Solis-Grid-Control";
 
 let relayStatus = null;
 let relayBusy = false;
 let relayPending = null;
 let relayFetched = 0;
-
-function relayAuth() {
-    try { return JSON.parse(localStorage.getItem(RELAY_AUTH_KEY) || "null"); }
-    catch (e) { return null; }
-}
-function relaySetAuth(auth) {
-    try {
-        if (auth) localStorage.setItem(RELAY_AUTH_KEY, JSON.stringify(auth));
-        else localStorage.removeItem(RELAY_AUTH_KEY);
-    } catch (e) { /* private mode: sign-in lasts for this page only */ }
-}
-
-async function relaySignIn(email, password) {
-    const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=password", {
-        method: "POST",
-        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email, password: password }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data || !data.access_token) {
-        throw new Error((data && (data.error_description || data.msg || data.error)) || "Sign in failed");
-    }
-    relaySetAuth({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token,
-        expires_at: Date.now() + ((data.expires_in || 3600) * 1000) - 60000,
-    });
-    return data.access_token;
-}
-
-async function relayToken() {
-    const auth = relayAuth();
-    if (!auth) return null;
-    if (auth.expires_at && Date.now() < auth.expires_at) return auth.access_token;
-    if (!auth.refresh_token) { relaySetAuth(null); return null; }
-    const res = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
-        method: "POST",
-        headers: { apikey: SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: auth.refresh_token }),
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data || !data.access_token) { relaySetAuth(null); return null; }
-    relaySetAuth({
-        access_token: data.access_token,
-        refresh_token: data.refresh_token || auth.refresh_token,
-        expires_at: Date.now() + ((data.expires_in || 3600) * 1000) - 60000,
-    });
-    return data.access_token;
-}
 
 async function fetchRelayStatus(force) {
     if (!force && Date.now() - relayFetched < 3000) return relayStatus;
@@ -441,16 +391,6 @@ function relayClock(iso) {
     const d = new Date(iso);
     if (isNaN(d)) return "--";
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-}
-
-function showRelayLogin(show) {
-    const form = document.getElementById("sonoff-login");
-    if (!form) return;
-    form.hidden = !show;
-    if (show) {
-        const email = document.getElementById("sonoff-email");
-        if (email) email.focus();
-    }
 }
 
 function updateRelayUI() {
@@ -510,10 +450,11 @@ async function relayToggle() {
     if (relayBusy) return;
     if (!relayStatus) return;
 
-    const token = await relayToken();
-    if (!token) { showRelayLogin(true); return; }
-
     const want = relayStatus.state === "on" ? "off" : "on";
+    // Energising the grid charger is worth one confirming tap; turning it off
+    // is the safe direction and stays a single tap.
+    if (want === "on" && !confirm("Turn the grid charger ON?")) return;
+
     relayBusy = true;
     relayPending = want;
     updateRelayUI();
@@ -523,7 +464,7 @@ async function relayToggle() {
             method: "PATCH",
             headers: {
                 apikey: SUPABASE_ANON_KEY,
-                Authorization: "Bearer " + token,
+                Authorization: "Bearer " + SUPABASE_ANON_KEY,
                 "Content-Type": "application/json",
                 Prefer: "return=minimal",
             },
@@ -533,11 +474,6 @@ async function relayToggle() {
                 requested_by: "web",
             }),
         });
-        if (res.status === 401) {
-            relaySetAuth(null);
-            showRelayLogin(true);
-            throw new Error("Sign in again");
-        }
         if (!res.ok) {
             const text = await res.text();
             throw new Error(text.includes("throttled")
@@ -564,26 +500,6 @@ async function relayToggle() {
 
 const relayBtn = document.getElementById("sonoff-btn");
 if (relayBtn) relayBtn.addEventListener("click", relayToggle);
-
-const relayLoginForm = document.getElementById("sonoff-login");
-if (relayLoginForm) {
-    relayLoginForm.addEventListener("submit", async (ev) => {
-        ev.preventDefault();
-        const err = document.getElementById("sonoff-login-err");
-        try {
-            await relaySignIn(
-                document.getElementById("sonoff-email").value.trim(),
-                document.getElementById("sonoff-pass").value,
-            );
-            if (err) err.textContent = "";
-            document.getElementById("sonoff-pass").value = "";
-            showRelayLogin(false);
-            relayToggle();                 // retry the action that asked for login
-        } catch (ex) {
-            if (err) err.textContent = ex.message;
-        }
-    });
-}
 
 let pollBusy = false;
 let anyError = false;

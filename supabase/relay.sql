@@ -10,8 +10,10 @@
 --
 -- Security:
 --   * relay_status is public read (it only mirrors what the dashboard shows).
---   * relay_control requires a signed-in Supabase Auth user; anonymous
---     clients cannot read or write it.
+--   * relay_control is public write: the site's button has no login, so the
+--     anon key shipped in the page can queue ON/OFF. Anyone who finds the
+--     site can therefore toggle the charger -- accepted trade-off.
+--   * The 3 s throttle trigger below limits command spam.
 --   * The local monitor uses the service_role key, which bypasses RLS.
 --
 -- Safe to run more than once.
@@ -56,16 +58,16 @@ create policy relay_status_read on public.relay_status
 
 grant select on public.relay_status to anon, authenticated;
 
--- Only a signed-in user can see and change the command row.
+-- Public read/write: the website button has no login. See the header note.
 drop policy if exists relay_control_read on public.relay_control;
 create policy relay_control_read on public.relay_control
-    for select to authenticated using (true);
+    for select to anon, authenticated using (true);
 
 drop policy if exists relay_control_write on public.relay_control;
 create policy relay_control_write on public.relay_control
-    for update to authenticated using (true) with check (true);
+    for update to anon, authenticated using (true) with check (true);
 
-grant select, update on public.relay_control to authenticated;
+grant select, update on public.relay_control to anon, authenticated;
 
 -- PostgREST roles need explicit table privileges; RLS only filters rows.
 -- The local monitor writes with the service_role key (it bypasses RLS, but

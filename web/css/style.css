@@ -562,44 +562,9 @@ body {
     border-color: var(--hairline);
 }
 
-.sonoff-login {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 8px;
-    margin-top: 14px;
-}
-.sonoff-login input {
-    min-width: 0;
-    padding: 9px 10px;
-    font: inherit;
-    font-size: 13px;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--hairline-strong);
-    background: transparent;
-    color: var(--text);
-}
-.sonoff-login input:focus { outline: 2px solid var(--grid); outline-offset: 1px; }
-.sonoff-login button {
-    padding: 9px 14px;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 600;
-    color: #fff;
-    background: var(--grid);
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-}
-.sonoff-err {
-    grid-column: 1 / -1;
-    font-size: 12px;
-    color: var(--danger);
-}
-
 @media (max-width: 480px) {
     .sonoff-btn { flex-basis: 104px; }
     .sonoff-row { font-size: 11px; }
-    .sonoff-login { grid-template-columns: 1fr; }
 }
 
 .value-flash { animation: valuePop 0.35s var(--ease); }
