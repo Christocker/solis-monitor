@@ -21,14 +21,13 @@ function renderField(field, decimals) {
 function supabaseHeaders() {
     return {
         "apikey": SUPABASE_ANON_KEY,
-        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
         "Content-Type": "application/json",
     };
 }
 
 // fetch() with a timeout so a stalled connection can never hang the page.
 // A timeout is retryable (the history splitter may re-request a smaller range).
-async function supabaseFetch(url, options = {}, timeoutMs = 20000) {
+async function supabaseFetchRaw(url, options = {}, timeoutMs = 20000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -41,6 +40,34 @@ async function supabaseFetch(url, options = {}, timeoutMs = 20000) {
         clearTimeout(timer);
     }
 }
+
+// All Supabase requests carry the signed-in user's JWT. A 401 triggers one
+// refresh; if that fails (or the user is not allowlisted), show the PIN page.
+async function supabaseFetch(url, options = {}, timeoutMs = 20000) {
+    const token = await authToken();
+    if (!token) {
+        redirectToLogin();
+        throw new Error("Not signed in");
+    }
+    const headers = { ...(options.headers || {}), Authorization: "Bearer " + token };
+    let res = await supabaseFetchRaw(url, { ...options, headers }, timeoutMs);
+    if (res.status === 401) {
+        const refreshed = await authRefresh();
+        if (refreshed) {
+            const fresh = await authToken();
+            if (fresh) {
+                headers.Authorization = "Bearer " + fresh;
+                res = await supabaseFetchRaw(url, { ...options, headers }, timeoutMs);
+            }
+        }
+    }
+    if (res.status === 401) redirectToLogin();
+    return res;
+}
+
+// Start the session check immediately. Individual requests also await
+// authToken(), so a slow refresh cannot race ahead of the first fetch.
+if (typeof authReady === "function") authReady();
 
 // Fetch the most recent reading row from Supabase (cached for offline use).
 async function fetchLatestReading() {

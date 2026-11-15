@@ -7,9 +7,13 @@
 // Example: "https://abcdefghijklmnop.supabase.co"
 const SUPABASE_URL = "https://mjdpcruukzcxeiilmrrw.supabase.co";
 
-// The anon / public key. Safe to expose to the browser because RLS
-// only allows SELECT (read). Never use the service_role key here.
+// The anon / public key. Safe to expose: it only identifies the project.
+// Data and relay access require a signed-in member (see auth_lockdown.sql).
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1qZHBjcnV1a3pjeGVpaWxtcnJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4MjIwMzIsImV4cCI6MjEwMjM5ODAzMn0.ssKbMKzgSpZZZsqDbauQnaPENdHtRp2jGzIwAjxqn20";
+
+// The shared Supabase Auth account. The login page asks only for its PIN;
+// this email is just an identifier and is not a real inbox.
+const AUTH_EMAIL = "viewer@solis-monitor.local";
 
 /* ---------------- Battery runtime estimate ----------------
    The hosted site cannot measure the pack, so give it the capacity here.

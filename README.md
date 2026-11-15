@@ -116,7 +116,8 @@ using the public anon key). No server needed on Vercel.
 
 > **Security note:** the `service_role` key lives only in the
 > laptop's `.env` (gitignored). The website uses only the `anon`
-> key, which cannot write to the database.
+> key, which is public but has **no data access**: RLS requires a
+> signed-in member of `public.app_users`. See "Private hosted site" below.
 
 Pages:
 - **Dashboard** — live cards (Solar, Battery, Grid, Load), energy-flow
@@ -266,11 +267,10 @@ website <--SELECT-- relay_status <--written by-- local monitor
 - `supabase/relay.sql` creates the command tables, RLS, the 3 s command
   throttle, and the `relay_config` rule-settings row. Run it once in the SQL
   editor (idempotent).
-- `relay_status` is public read (it mirrors the dashboard). `relay_control`
-  and `relay_config` are **public write**: the hosted card has no login, so
-  the anon key in the page can queue ON/OFF, change the thresholds, or disable
-  the rule. Anyone who finds the site can do this. The 3 s throttle limits
-  command spam; the controller's 60 s action gap limits relay chatter.
+- `relay_status` is readable by signed-in members. `relay_control` and
+  `relay_config` require the authenticated session described below; `anon`
+  has no read or write access. The 3 s throttle limits command spam; the
+  controller's 60 s action gap limits relay chatter.
 - `dashboard_app/relay_cloud.py` polls every 2 s, applies commands through the
   same `SonoffController.manual()` / `set_rule()` paths as the dashboard, and
   publishes the result. Commands older than 5 minutes are dropped, never
@@ -278,6 +278,45 @@ website <--SELECT-- relay_status <--written by-- local monitor
 - Turning ON asks for one confirming tap. Turning OFF is immediate.
 
 Latency is ~2-4 s (queue poll), not instant.
+
+## Private hosted site (6-digit PIN)
+
+The hosted site is static, so the PIN is checked by **Supabase Auth**, not by
+JavaScript. The anon key remains public, but it has no data access:
+
+```
+PIN screen -> Supabase Auth -> user JWT -> all reads/RPCs/relay writes
+                                    |
+                              RLS: is_app_user()
+```
+
+Setup:
+
+1. Create the shared Auth user (already done in this deployment):
+   `viewer@solis-monitor.local`, password = the 6-digit PIN. The PIN is not
+   stored in the repository.
+2. In Supabase → Authentication, **disable new user sign-ups** and tighten the
+   sign-in rate limit (for example 10 attempts / 5 minutes per IP). A 6-digit
+   PIN is only ~1M combinations; rate limiting is what makes it practical.
+3. Run `supabase/auth_lockdown.sql` once. It creates `public.app_users`, adds
+   the shared user, removes every `anon` grant, and makes all reads, history
+   RPCs, and relay writes require an allowlisted authenticated user.
+4. Deploy `web/`. The login page asks only for the PIN; the email is an
+   identifier and is not shown.
+
+Sessions are stored in `localStorage`, refreshed automatically, and last until
+the **Lock** button is pressed, the browser storage is cleared, or the session
+is revoked. To add another person, create their Auth user and insert their
+`auth.users.id` into `public.app_users`. To revoke the shared PIN, change the
+Auth user's password and sign out its sessions.
+
+The service worker caches only the app shell, never Supabase responses, so
+history and readings are not left in CacheStorage on a shared device. Logout
+also clears `solis:last`, the lifetime cache, history `sessionStorage`, and the
+service-worker cache.
+
+The local Flask dashboard is unaffected: it keeps its own LAN gate and the
+laptop keeps using `service_role` for polling, cloud sync, and relay control.
 
 ## Access control (LAN)
 
@@ -344,22 +383,27 @@ power data is available:
 | `run_server.py` | Web dashboard entry point bound to 0.0.0.0 (LAN) |
 | `cloud_sync.py` | Laptop side: push readings to Supabase (every 2s) |
 | `run_cloud_sync.bat` | Launcher for cloud_sync.py |
-| `supabase/schema.sql` | Supabase tables + RLS policies (run in SQL editor) |
-| `supabase/rollup.sql` | Supabase 1-minute rollup + `history_buckets_fast` (run once) |
+| `supabase/schema.sql` | Supabase tables + `history_buckets` + RLS (run first) |
+| `supabase/rollup.sql` | 1-minute rollup + `history_buckets_fast` (run once) |
+| `supabase/relay.sql` | Relay command queue + rule settings (run once) |
+| `supabase/auth_lockdown.sql` | Private-site PIN gate: `app_users` + authenticated-only RLS (run last) |
 | `web/` | **Vercel static site** (reads from Supabase) |
-| `web/config.js` | Supabase URL + anon key for the hosted site |
+| `web/config.js` | Supabase URL + anon key + shared Auth email |
+| `web/login.html` | PIN screen for the hosted site |
+| `web/js/auth.js` | Supabase Auth login / refresh / lock |
 | `dashboard_app/config.py` | Connection + app settings |
 | `dashboard_app/registers.py` | **Single source of truth** for the register map |
 | `dashboard_app/modbus_layer.py` | Layer 1: Modbus acquisition + poller |
 | `dashboard_app/normalize.py` | Layer 2: normalized snapshot |
 | `dashboard_app/api.py` | Layer 3: Flask API |
 | `dashboard_app/data_logger.py` | SQLite history recorder (background thread) |
+| `dashboard_app/cloud_sync.py` | Supabase uploader, heartbeat, daily energy |
 | `dashboard_app/sonoff.py` | Grid-control relay (SOC hysteresis via Home Assistant) |
+| `dashboard_app/relay_cloud.py` | Website relay/rule command queue |
 | `dashboard_app/access.py` | LAN gate: MAC allowlist + password fallback |
 | `dashboard_app/templates/` | Layer 4: HTML pages |
 | `dashboard_app/static/` | Layer 4: CSS + JS (incl. local Chart.js, works offline) |
 | `archive/` | Temporary Phase 1 discovery scripts |
-| `docs/` | Reference documentation |
 
 ## Verified Register Map (S6-EH1P, ESINV-33000ID protocol)
 

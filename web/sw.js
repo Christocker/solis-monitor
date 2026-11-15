@@ -1,13 +1,17 @@
-/* Solis Monitor service worker — installable app + offline last-known data.
+/* Solis Monitor service worker — installable app + offline shell.
    Keep VERSION in lockstep with the ?v= query string in the HTML pages so a
-   deploy that changes JS/CSS without touching sw.js still refreshes. */
-const VERSION = "20261115b";
+   deploy that changes JS/CSS without touching sw.js still refreshes.
+   Supabase data is deliberately NOT cached: it is private to the signed-in
+   user and must disappear when the device is locked. */
+const VERSION = "20261115c";
 const CACHE = "solis-" + VERSION;
 const SHELL = [
     "./", "./index.html", "./history", "./history.html",
     "./system", "./system.html",
+    "./login", "./login.html",
     "./css/style.css?v=" + VERSION,
     "./config.js?v=" + VERSION,
+    "./js/auth.js?v=" + VERSION,
     "./js/common.js?v=" + VERSION,
     "./js/dashboard.js?v=" + VERSION,
     "./js/history.js?v=" + VERSION,
@@ -57,11 +61,8 @@ self.addEventListener("fetch", (e) => {
             fetch(req).then((res) => putIfOk(req, res))
                 .catch(() => caches.match(req, { ignoreSearch: true }))
         );
-    } else if (url.hostname.endsWith(".supabase.co")) {
-        // Data: network-first, fall back to the last cached response offline.
-        e.respondWith(
-            fetch(req).then((res) => putIfOk(req, res))
-                .catch(() => caches.match(req))
-        );
     }
+    // Supabase requests are not intercepted: no session-scoped data in the
+    // CacheStorage. The dashboard's in-memory/localStorage fallback handles
+    // "last known" only while the user is signed in.
 });
