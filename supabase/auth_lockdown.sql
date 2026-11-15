@@ -61,32 +61,32 @@ grant execute on function public.is_app_user() to authenticated, service_role;
 drop policy if exists "readings public read" on public.readings;
 drop policy if exists "readings authenticated read" on public.readings;
 create policy "readings authenticated read" on public.readings
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 drop policy if exists "system_info public read" on public.system_info;
 drop policy if exists "system_info authenticated read" on public.system_info;
 create policy "system_info authenticated read" on public.system_info
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 drop policy if exists "sync_status public read" on public.sync_status;
 drop policy if exists "sync_status authenticated read" on public.sync_status;
 create policy "sync_status authenticated read" on public.sync_status
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 drop policy if exists "daily_energy public read" on public.daily_energy;
 drop policy if exists "daily_energy authenticated read" on public.daily_energy;
 create policy "daily_energy authenticated read" on public.daily_energy
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 drop policy if exists "readings_1m public read" on public.readings_1m;
 drop policy if exists "readings_1m authenticated read" on public.readings_1m;
 create policy "readings_1m authenticated read" on public.readings_1m
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 drop policy if exists relay_status_read on public.relay_status;
 drop policy if exists relay_status_authenticated_read on public.relay_status;
 create policy relay_status_authenticated_read on public.relay_status
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 -- ------------------------------------------------------------
 -- 3. Measurement tables: writes are service_role only
@@ -117,26 +117,26 @@ create policy "readings_1m service write" on public.readings_1m
 drop policy if exists relay_control_read on public.relay_control;
 drop policy if exists relay_control_authenticated_read on public.relay_control;
 create policy relay_control_authenticated_read on public.relay_control
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 drop policy if exists relay_control_write on public.relay_control;
 drop policy if exists relay_control_authenticated_write on public.relay_control;
 create policy relay_control_authenticated_write on public.relay_control
     for update to authenticated
-    using (public.is_app_user())
-    with check (public.is_app_user());
+    using ((select public.is_app_user()))
+    with check ((select public.is_app_user()));
 
 drop policy if exists relay_config_read on public.relay_config;
 drop policy if exists relay_config_authenticated_read on public.relay_config;
 create policy relay_config_authenticated_read on public.relay_config
-    for select to authenticated using (public.is_app_user());
+    for select to authenticated using ((select public.is_app_user()));
 
 drop policy if exists relay_config_write on public.relay_config;
 drop policy if exists relay_config_authenticated_write on public.relay_config;
 create policy relay_config_authenticated_write on public.relay_config
     for update to authenticated
-    using (public.is_app_user())
-    with check (public.is_app_user());
+    using ((select public.is_app_user()))
+    with check ((select public.is_app_user()));
 
 -- ------------------------------------------------------------
 -- 5. Table grants: anon gets nothing
