@@ -211,10 +211,25 @@ function updateLifetime(e) {
     if (e.first_record) {
         const d = new Date(e.first_record * 1000).toLocaleDateString();
         set("stat-life-since", d);
-        set("life-since", "since " + d);
+        const note = document.getElementById("life-since");
+        if (note) {
+            note.textContent = "since " + d +
+                (e.source === "estimate" ? " \u00b7 estimate" : "");
+            if (e.source === "laptop") {
+                const updated = e.updated_at
+                    ? new Date(e.updated_at).toLocaleString() : "";
+                note.title = "Exact totals from the laptop" +
+                    (updated ? " \u00b7 updated " + updated : "");
+            } else if (e.source === "estimate") {
+                note.title = "Estimated from cloud history buckets";
+            } else {
+                note.title = "";
+            }
+        }
     } else {
         set("stat-life-since", NORMAL_DASH);
-        set("life-since", "");
+        const note = document.getElementById("life-since");
+        if (note) { note.textContent = ""; note.title = ""; }
     }
 }
 
@@ -823,14 +838,15 @@ async function refreshEnergy() {
 // CO2 factors match the backend defaults (dashboard_app/config.py).
 const CO2_KG_PER_KWH = 0.7;
 const CO2_KG_PER_TREE_YEAR = 21.0;
-const LIFETIME_CACHE_KEY = "lifetimeEnergy:v2";
-const LIFETIME_TTL_MS = 6 * 60 * 60 * 1000;
+const LIFETIME_CACHE_KEY = "lifetimeEnergy:v3";
+const LIFETIME_TTL_MS = 30 * 60 * 1000;
+const LIFETIME_ESTIMATE_TTL_MS = 5 * 60 * 1000;
 
 function co2Field(solarKwh) {
-    if (solarKwh == null) {
+    if (solarKwh == null || !isFinite(Number(solarKwh))) {
         return { value: null, state: "unavailable", unit: "kg", trees: null };
     }
-    const co2 = solarKwh * CO2_KG_PER_KWH;
+    const co2 = Number(solarKwh) * CO2_KG_PER_KWH;
     return {
         value: Math.round(co2 * 10) / 10,
         state: "available",
@@ -839,6 +855,39 @@ function co2Field(solarKwh) {
     };
 }
 
+function lifetimeField(value, unit) {
+    const n = value == null ? null : Number(value);
+    if (n == null || !isFinite(n)) {
+        return { value: null, state: "unavailable", unit: unit || "kWh" };
+    }
+    return { value: n, state: "available", unit: unit || "kWh" };
+}
+
+// Exact totals published by the laptop (supabase/lifetime.sql).
+function lifetimeFromStats(row) {
+    const solar = row && row.solar_kwh != null ? Number(row.solar_kwh) : null;
+    return {
+        lifetime_solar: lifetimeField(solar, "kWh"),
+        lifetime_consumption: lifetimeField(row && row.consumption_kwh, "kWh"),
+        lifetime_battery_charge: lifetimeField(row && row.battery_charge_kwh, "kWh"),
+        lifetime_battery_discharge: lifetimeField(row && row.battery_discharge_kwh, "kWh"),
+        co2_avoided: co2Field(solar),
+        first_record: row && row.first_record != null ? Number(row.first_record) : null,
+        source: "laptop",
+        updated_at: row && row.updated_at ? row.updated_at : null,
+    };
+}
+
+function hasLifetimeValues(lifetime) {
+    if (!lifetime) return false;
+    return ["lifetime_solar", "lifetime_consumption",
+            "lifetime_battery_charge", "lifetime_battery_discharge"]
+        .some((key) => lifetime[key] && lifetime[key].state === "available"
+                       && lifetime[key].value != null);
+}
+
+// Fallback: integrate cloud history buckets. Used only when the laptop's
+// exact lifetime_stats row is unavailable (table not created yet / offline).
 function lifetimeFromBuckets(rows) {
     const e = computeEnergy(rows);
     const solar = e.today_solar && e.today_solar.state === "available"
@@ -850,6 +899,8 @@ function lifetimeFromBuckets(rows) {
         lifetime_battery_discharge: e.today_battery_discharge,
         co2_avoided: co2Field(solar),
         first_record: rows.length ? rows[0].ts_unix : null,
+        source: "estimate",
+        updated_at: null,
     };
 }
 
@@ -867,25 +918,45 @@ let lifetimeBusy = false;
 let lifetimeRetry = null;
 async function refreshLifetime() {
     if (lifetimeBusy) return;
+
+    // Show the last known values immediately, then refresh in the background.
+    let cached = null;
     try {
         const raw = localStorage.getItem(LIFETIME_CACHE_KEY);
         if (raw) {
             const o = JSON.parse(raw);
-            if (Date.now() - o.t < LIFETIME_TTL_MS) { updateLifetime(o.lifetime); return; }
+            if (o && o.lifetime) {
+                cached = o.lifetime;
+                updateLifetime(cached);
+                const ttl = cached.source === "laptop"
+                    ? LIFETIME_TTL_MS : LIFETIME_ESTIMATE_TTL_MS;
+                if (o.t && Date.now() - o.t < ttl) return;
+            }
         }
     } catch (e) { /* ignore */ }
+
     lifetimeBusy = true;
-    updateLifetimeLoading();
+    if (!cached) updateLifetimeLoading();
     try {
-        const rows = await fetchHistoryBuckets(null, null, 900);
-        const lifetime = lifetimeFromBuckets(rows);
+        let lifetime = null;
+        const stats = await fetchLifetimeStats();
+        if (stats) lifetime = lifetimeFromStats(stats);
+        if (!hasLifetimeValues(lifetime)) {
+            const rows = await fetchHistoryBuckets(null, null, 900);
+            lifetime = lifetimeFromBuckets(rows);
+        }
+        if (!hasLifetimeValues(lifetime)) {
+            throw new Error("no lifetime data");
+        }
         try {
-            localStorage.setItem(LIFETIME_CACHE_KEY, JSON.stringify({ t: Date.now(), lifetime }));
+            localStorage.setItem(LIFETIME_CACHE_KEY, JSON.stringify({
+                t: Date.now(), lifetime,
+            }));
         } catch (e) { /* ignore */ }
         updateLifetime(lifetime);
     } catch (err) {
         console.error("lifetime refresh failed", err);
-        // Retry sooner than the 30-minute period after a failure.
+        if (!cached) updateLifetime(lifetimeFromBuckets([]));
         if (lifetimeRetry) clearTimeout(lifetimeRetry);
         lifetimeRetry = setTimeout(refreshLifetime, 60000);
     } finally {

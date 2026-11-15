@@ -30,6 +30,7 @@ from . import alerts
 from . import sonoff
 from . import relay_cloud
 from . import access
+from . import lifetime
 
 # Grid-control relay (SONOFF MINIR4 through Home Assistant). The SOC provider
 # is wired up in create_app() so this module stays import-safe.
@@ -114,23 +115,20 @@ def _lifetime_placeholders():
 
 
 def _compute_lifetime_fields():
-    """Integrate the whole recording once (returns None if there is no data)."""
-    now = time.time()
-    first, _last = data_logger.logger.min_max_time()
-    if first is None:
-        return None
-    summary = data_logger.logger.energy_summary(first, now)
-    if not summary.get("intervals"):
+    """Build the field-shaped lifetime totals from the shared cache."""
+    data = lifetime.get()
+    if not data:
         return None
     return {
-        "lifetime_solar": _energy_field("Lifetime Solar Generation", summary.get("solar")),
-        "lifetime_consumption": _energy_field("Lifetime Consumption", summary.get("consumption")),
+        "lifetime_solar": _energy_field("Lifetime Solar Generation", data["solar_kwh"]),
+        "lifetime_consumption": _energy_field("Lifetime Consumption", data["consumption_kwh"]),
         "lifetime_battery_charge": _energy_field("Lifetime Battery Charged",
-                                                 summary.get("battery_charge")),
+                                                 data["battery_charge_kwh"]),
         "lifetime_battery_discharge": _energy_field("Lifetime Battery Discharged",
-                                                    summary.get("battery_discharge")),
-        "co2_avoided": _co2_field("CO2 Avoided", summary.get("solar")),
-        "first_record": first,
+                                                    data["battery_discharge_kwh"]),
+        "co2_avoided": _co2_field("CO2 Avoided", data["solar_kwh"]),
+        "first_record": data["first_record"],
+        "computed_at": data.get("computed_at"),
     }
 
 

@@ -318,6 +318,16 @@ service-worker cache.
 The local Flask dashboard is unaffected: it keeps its own LAN gate and the
 laptop keeps using `service_role` for polling, cloud sync, and relay control.
 
+## Lifetime statistics
+
+The hosted **Lifetime** tiles use `public.lifetime_stats`, a single row the
+laptop upserts every 5 minutes from its complete SQLite archive. This is the
+same calculation the local dashboard uses, so both show the same totals.
+
+Run `supabase/lifetime.sql` once after `supabase/auth_lockdown.sql`. If the
+table is missing, or the laptop has not published yet, the hosted site falls
+back to integrating cloud history buckets and marks the note as **estimate**.
+
 ## Access control (LAN)
 
 The local dashboard is gated by MAC allowlist with a password fallback:
@@ -387,6 +397,7 @@ power data is available:
 | `supabase/rollup.sql` | 1-minute rollup + `history_buckets_fast` (run once) |
 | `supabase/relay.sql` | Relay command queue + rule settings (run once) |
 | `supabase/auth_lockdown.sql` | Private-site PIN gate: `app_users` + authenticated-only RLS (run last) |
+| `supabase/lifetime.sql` | Exact lifetime totals published by the laptop (run after auth_lockdown) |
 | `web/` | **Vercel static site** (reads from Supabase) |
 | `web/config.js` | Supabase URL + anon key + shared Auth email |
 | `web/login.html` | PIN screen for the hosted site |

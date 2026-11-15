@@ -101,6 +101,19 @@ async function fetchSyncStatus() {
     } catch (e) { return null; }
 }
 
+// Exact lifetime totals published by the laptop (supabase/lifetime.sql).
+// Returns null when the row/table is unavailable so the caller can fall back
+// to the cloud-bucket estimate.
+async function fetchLifetimeStats() {
+    try {
+        const url = SUPABASE_URL + "/rest/v1/lifetime_stats?id=eq.1&select=*";
+        const res = await supabaseFetch(url, { headers: supabaseHeaders() });
+        if (!res.ok) return null;
+        const rows = await res.json();
+        return rows[0] || null;
+    } catch (e) { return null; }
+}
+
 // Fetch system info row (serial, model).
 async function fetchSystemInfo() {
     const url = SUPABASE_URL + "/rest/v1/system_info" +

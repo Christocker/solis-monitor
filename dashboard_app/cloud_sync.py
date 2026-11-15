@@ -19,6 +19,7 @@ import os
 import socket
 import threading
 import time
+from datetime import datetime, timezone
 
 import requests
 
@@ -188,6 +189,8 @@ class CloudSyncer:
         self._last_error = None
         self._last_heartbeat = 0.0
         self._last_energy = 0.0
+        self._last_lifetime = 0.0
+        self._lifetime_missing = False
         self._error_printed = 0
         self._capacity_synced = False   # battery capacity pushed to system_info
 
@@ -280,6 +283,47 @@ class CloudSyncer:
         except Exception as exc:
             self._last_error = str(exc)
 
+    def _maybe_lifetime(self):
+        """Publish the laptop's exact lifetime totals every 5 minutes.
+
+        The hosted site prefers this row over its cloud-bucket estimate, so the
+        hosted and local dashboards show the same numbers. If the table has
+        not been created yet, log once and keep going; the site falls back to
+        the estimate.
+        """
+        now = time.time()
+        if now - self._last_lifetime < ENERGY_INTERVAL:
+            return
+        try:
+            from . import lifetime
+            data = lifetime.peek()
+            if not data:
+                # The API's lifetime worker warms this cache in its own
+                # thread; retry soon without blocking the 2-second upload loop.
+                self._last_lifetime = now - ENERGY_INTERVAL + 15
+                return
+            self._last_lifetime = now
+            supabase_upsert("lifetime_stats", [{
+                "id": 1,
+                "solar_kwh": data["solar_kwh"],
+                "consumption_kwh": data["consumption_kwh"],
+                "battery_charge_kwh": data["battery_charge_kwh"],
+                "battery_discharge_kwh": data["battery_discharge_kwh"],
+                "grid_import_kwh": data["grid_import_kwh"],
+                "grid_export_kwh": data["grid_export_kwh"],
+                "first_record": data["first_record"],
+                "samples": data["samples"],
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }], self._url, self._key, on_conflict="id")
+            if self._lifetime_missing:
+                print(" Cloud sync: lifetime stats published.")
+                self._lifetime_missing = False
+        except requests.RequestException as exc:
+            if not self._lifetime_missing:
+                self._lifetime_missing = True
+                print(" Cloud sync: lifetime_stats table unavailable "
+                      f"({exc}); run supabase/lifetime.sql to show exact totals.")
+
     def stop(self):
         self._stop_event.set()
 
@@ -348,6 +392,7 @@ class CloudSyncer:
 
             self._maybe_heartbeat()
             self._maybe_energy()
+            self._maybe_lifetime()
 
             # Sleep only the remainder of the interval so the upload
             # cadence stays exactly SYNC_INTERVAL (not interval + upload time).

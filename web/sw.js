@@ -3,7 +3,7 @@
    deploy that changes JS/CSS without touching sw.js still refreshes.
    Supabase data is deliberately NOT cached: it is private to the signed-in
    user and must disappear when the device is locked. */
-const VERSION = "20261115e";
+const VERSION = "20261115f";
 const CACHE = "solis-" + VERSION;
 const SHELL = [
     "./", "./index.html", "./history", "./history.html",
