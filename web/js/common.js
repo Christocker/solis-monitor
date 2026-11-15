@@ -161,6 +161,10 @@ function _histCacheGet(key) {
             sessionStorage.removeItem(key);
             return null;
         }
+        // Older cache entries may have been written before the RPC sort fix.
+        if (Array.isArray(obj.rows)) {
+            obj.rows.sort((a, b) => a.ts_unix - b.ts_unix);
+        }
         return obj.rows;
     } catch (e) { return null; }
 }
@@ -310,6 +314,9 @@ async function historyBucketsRpc(startUnix, endUnix, buckets, fn) {
     }
     const rows = await res.json();
     rows.forEach((r) => { r.ts_unix = r.bucket_ts; });
+    // PostgREST/plpgsql does not guarantee the GROUP BY order. Charts and
+    // trapezoidal energy integration both require oldest -> newest.
+    rows.sort((a, b) => a.ts_unix - b.ts_unix);
     return rows;
 }
 
@@ -400,10 +407,11 @@ function computeEnergy(rows) {
         };
     }
     const maxGap = energyMaxGap(rows);
+    const ordered = rows.slice().sort((a, b) => a.ts_unix - b.ts_unix);
     let solar = 0, consumption = 0, charge = 0, discharge = 0;
     let gridImport = 0, gridExport = 0;
     let prev = null;
-    for (const r of rows) {
+    for (const r of ordered) {
         // null when both ports are missing — never fabricate a 0 W load.
         const load = totalLoad(r);
         if (prev) {
@@ -413,7 +421,9 @@ function computeEnergy(rows) {
                     solar += (prev.pv + r.pv_power) / 2 * dt;
                 if (prev.load != null && load != null)
                     consumption += (prev.load + load) / 2 * dt;
-                if (prev.batt != null && r.battery_power != null) {
+                if (prev.batt != null && r.battery_power != null
+                        && prev.ts >= GRID_ENERGY_VALID_FROM
+                        && r.ts_unix >= GRID_ENERGY_VALID_FROM) {
                     const e = (prev.batt + r.battery_power) / 2 * dt;
                     if (e > 0) discharge += e; else charge += -e;
                 }

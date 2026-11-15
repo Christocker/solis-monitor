@@ -823,7 +823,7 @@ async function refreshEnergy() {
 // CO2 factors match the backend defaults (dashboard_app/config.py).
 const CO2_KG_PER_KWH = 0.7;
 const CO2_KG_PER_TREE_YEAR = 21.0;
-const LIFETIME_CACHE_KEY = "lifetimeEnergy:v1";
+const LIFETIME_CACHE_KEY = "lifetimeEnergy:v2";
 const LIFETIME_TTL_MS = 6 * 60 * 60 * 1000;
 
 function co2Field(solarKwh) {
@@ -877,7 +877,7 @@ async function refreshLifetime() {
     lifetimeBusy = true;
     updateLifetimeLoading();
     try {
-        const rows = await fetchHistoryBuckets(null, null, 600);
+        const rows = await fetchHistoryBuckets(null, null, 900);
         const lifetime = lifetimeFromBuckets(rows);
         try {
             localStorage.setItem(LIFETIME_CACHE_KEY, JSON.stringify({ t: Date.now(), lifetime }));
