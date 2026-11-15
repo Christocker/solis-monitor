@@ -348,7 +348,24 @@ def create_app():
     @app.route("/api/sonoff/auto", methods=["POST"])
     def api_sonoff_auto():
         body = request.get_json(silent=True) or {}
-        return jsonify(sonoff_controller.set_auto(bool(body.get("enabled", True))))
+        try:
+            return jsonify(sonoff_controller.set_rule(
+                enabled=bool(body.get("enabled", True))))
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
+
+    @app.route("/api/sonoff/settings", methods=["POST"])
+    def api_sonoff_settings():
+        """Change the SOC rule thresholds and/or the enable switch."""
+        body = request.get_json(silent=True) or {}
+        try:
+            return jsonify(sonoff_controller.set_rule(
+                on_soc=body.get("on_soc"),
+                off_soc=body.get("off_soc"),
+                enabled=body.get("enabled") if "enabled" in body else None,
+            ))
+        except (TypeError, ValueError) as exc:
+            return jsonify({"error": str(exc)}), 400
 
     @app.route("/api/diagnostics")
     def api_diagnostics():

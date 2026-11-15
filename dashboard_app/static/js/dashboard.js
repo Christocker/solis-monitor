@@ -367,6 +367,7 @@ function set(id, text) {
 
 /* ---- Grid-control relay (SONOFF MINIR4 via Home Assistant) ---- */
 let sonoffBusy = false;
+let sonoffMsgTimer = null;
 
 function sonoffClock(ts) {
     if (!ts) return "--";
@@ -375,9 +376,62 @@ function sonoffClock(ts) {
     });
 }
 
+function sonoffRuleForm() {
+    return document.getElementById("sonoff-rule-form");
+}
+
+function sonoffRuleDirty() {
+    const form = sonoffRuleForm();
+    return !!(form && form.dataset.dirty === "true");
+}
+
+function markSonoffRuleDirty() {
+    const form = sonoffRuleForm();
+    if (form) form.dataset.dirty = "true";
+}
+
+function clearSonoffRuleDirty() {
+    const form = sonoffRuleForm();
+    if (form) delete form.dataset.dirty;
+}
+
+function sonoffMsg(text, isError, isOk) {
+    const el = document.getElementById("sonoff-save-msg");
+    if (!el) return;
+    el.textContent = text || "";
+    el.dataset.error = isError ? "true" : "false";
+    el.dataset.ok = isOk ? "true" : "false";
+    clearTimeout(sonoffMsgTimer);
+    if (isOk) {
+        sonoffMsgTimer = setTimeout(() => {
+            if (el.textContent === text) el.textContent = "";
+        }, 4000);
+    }
+}
+
+function sonoffRuleValues() {
+    const onEl = document.getElementById("sonoff-on-soc");
+    const offEl = document.getElementById("sonoff-off-soc");
+    if (!onEl || !offEl || onEl.value === "" || offEl.value === "") {
+        return { error: "Enter both SOC values." };
+    }
+    const on = Number(onEl.value);
+    const off = Number(offEl.value);
+    if (!Number.isFinite(on) || !Number.isFinite(off)) {
+        return { error: "SOC values must be numbers." };
+    }
+    if (on < 0 || on > 100 || off < 0 || off > 100) {
+        return { error: "SOC values must be between 0 and 100." };
+    }
+    if (on >= off) {
+        return { error: "OFF must be greater than ON." };
+    }
+    return { on: on, off: off };
+}
+
 function updateSonoff(s) {
     const card = document.getElementById("sonoff-card");
-    if (!card) return;                        // hosted build has no card
+    if (!card) return;
     if (!s || !s.configured) { card.hidden = true; return; }
     card.hidden = false;
 
@@ -394,39 +448,41 @@ function updateSonoff(s) {
     }
     if (label) label.textContent = known ? (on ? "ON" : "OFF") : NORMAL_DASH;
 
-    const name = document.getElementById("sonoff-name");
-    if (name) {
-        name.textContent = s.name || "MINIR4";
-        name.title = s.entity || "";
-    }
-
     const soc = document.getElementById("sonoff-soc");
     if (soc) {
         soc.textContent = s.soc == null ? NORMAL_DASH : Math.round(Number(s.soc)) + "%";
     }
 
-    const rule = document.getElementById("sonoff-rule");
-    if (rule) {
-        rule.textContent = "ON \u2264 " + s.on_soc + "% \u00b7 OFF \u2265 " + s.off_soc + "%";
+    const onInput = document.getElementById("sonoff-on-soc");
+    const offInput = document.getElementById("sonoff-off-soc");
+    const form = sonoffRuleForm();
+    const dirty = sonoffRuleDirty();
+    const active = document.activeElement;
+    if (onInput && !dirty && active !== onInput && s.on_soc != null) {
+        onInput.value = String(s.on_soc);
     }
+    if (offInput && !dirty && active !== offInput && s.off_soc != null) {
+        offInput.value = String(s.off_soc);
+    }
+    if (form) form.hidden = s.on_soc == null || s.off_soc == null;
 
     const auto = document.getElementById("sonoff-auto-input");
-    if (auto && document.activeElement !== auto) auto.checked = !!s.auto;
+    if (auto && !sonoffBusy && active !== auto) auto.checked = !!s.auto;
 
     const last = document.getElementById("sonoff-last");
     if (last) {
-        if (s.last_action && s.last_action.at) {
+        if (!s.auto) {
+            last.textContent = "Rule off \u00b7 manual control";
+            last.title = "SOC automation is disabled; the relay stays where you set it.";
+        } else if (s.reachable === false) {
+            last.textContent = "Home Assistant unreachable";
+            last.title = s.error || "";
+        } else if (s.last_action && s.last_action.at) {
             const a = s.last_action;
             last.textContent = (a.action === "on" ? "On" : "Off") +
                 " \u00b7 " + sonoffClock(a.at) +
                 (a.soc != null ? " \u00b7 " + Math.round(a.soc) + "%" : "");
             last.title = a.reason || "";
-        } else if (!s.auto) {
-            last.textContent = "Auto off";
-            last.title = "";
-        } else if (s.reachable === false) {
-            last.textContent = "Home Assistant unreachable";
-            last.title = s.error || "";
         } else {
             last.textContent = "Waiting for thresholds";
             last.title = "";
@@ -451,11 +507,45 @@ async function sonoffManual() {
     }
 }
 
-async function sonoffAuto(enabled) {
+async function sonoffSaveRule(ev) {
+    ev.preventDefault();
+    if (sonoffBusy) return;
+    const vals = sonoffRuleValues();
+    if (vals.error) { sonoffMsg(vals.error, true, false); return; }
+    sonoffBusy = true;
+    const saveBtn = document.getElementById("sonoff-save");
+    if (saveBtn) saveBtn.disabled = true;
+    sonoffMsg("Saving\u2026", false, false);
     try {
-        updateSonoff(await postJSON("/api/sonoff/auto", { enabled: enabled }, 15000));
+        const s = await postJSON("/api/sonoff/settings",
+            { on_soc: vals.on, off_soc: vals.off }, 15000);
+        clearSonoffRuleDirty();
+        updateSonoff(s);
+        sonoffMsg("Saved", false, true);
     } catch (err) {
-        if (err.status === 401) window.location.href = "/login";
+        if (err.status === 401) { window.location.href = "/login"; return; }
+        sonoffMsg(err.message, true, false);
+    } finally {
+        sonoffBusy = false;
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+async function sonoffAuto(enabled) {
+    if (sonoffBusy) return;
+    sonoffBusy = true;
+    sonoffMsg(enabled ? "Enabling rule\u2026" : "Disabling rule\u2026", false, false);
+    try {
+        updateSonoff(await postJSON("/api/sonoff/settings", { enabled: enabled }, 15000));
+        sonoffMsg(enabled ? "Rule enabled" : "Rule disabled \u00b7 manual control",
+                  false, !enabled);
+    } catch (err) {
+        if (err.status === 401) { window.location.href = "/login"; return; }
+        sonoffMsg(err.message, true, false);
+        const auto = document.getElementById("sonoff-auto-input");
+        if (auto) auto.checked = !enabled;
+    } finally {
+        sonoffBusy = false;
     }
 }
 
@@ -464,6 +554,17 @@ if (sonoffBtn) sonoffBtn.addEventListener("click", sonoffManual);
 const sonoffAutoInput = document.getElementById("sonoff-auto-input");
 if (sonoffAutoInput) {
     sonoffAutoInput.addEventListener("change", () => sonoffAuto(sonoffAutoInput.checked));
+}
+const sonoffRuleFormEl = document.getElementById("sonoff-rule-form");
+if (sonoffRuleFormEl) {
+    sonoffRuleFormEl.addEventListener("submit", sonoffSaveRule);
+    ["sonoff-on-soc", "sonoff-off-soc"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", () => {
+            markSonoffRuleDirty();
+            sonoffMsg("", false, false);
+        });
+    });
 }
 
 let pollBusy = false;

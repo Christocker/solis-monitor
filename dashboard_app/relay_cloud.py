@@ -54,6 +54,8 @@ class RelayCloud:
         self._thread = None
         self._last_status = 0.0
         self._last_error = None
+        self._config_missing = False
+        self._config_error = None
 
     @property
     def configured(self):
@@ -75,6 +77,15 @@ class RelayCloud:
     def _get_command(self):
         resp = requests.get(
             f"{self._url}/rest/v1/relay_control?id=eq.1&select=*",
+            headers=self._headers(prefer_minimal=False), timeout=HTTP_TIMEOUT_S,
+        )
+        resp.raise_for_status()
+        rows = resp.json() or []
+        return rows[0] if rows else None
+
+    def _get_config(self):
+        resp = requests.get(
+            f"{self._url}/rest/v1/relay_config?id=eq.1&select=*",
             headers=self._headers(prefer_minimal=False), timeout=HTTP_TIMEOUT_S,
         )
         resp.raise_for_status()
@@ -137,12 +148,76 @@ class RelayCloud:
         except requests.RequestException as exc:
             self._note_error(f"mark applied: {exc}")
 
+    def _mark_config_applied(self, requested_at):
+        try:
+            self._patch("relay_config", {"applied_at": requested_at})
+        except requests.RequestException as exc:
+            self._note_error(f"mark config applied: {exc}")
+
+    def _apply_config(self, row):
+        """Apply a queued rule change (thresholds and/or enable switch)."""
+        requested_at = row.get("requested_at")
+        applied_at = row.get("applied_at")
+        if not requested_at or requested_at == applied_at:
+            return False
+
+        stamp = _parse_ts(requested_at)
+        if stamp is None:
+            self._mark_config_applied(requested_at)
+            return False
+
+        # Last write wins: a local dashboard save after this request must not
+        # be overwritten by an older queued web change.
+        if stamp <= self._controller.settings_changed_at():
+            self._mark_config_applied(requested_at)
+            return False
+
+        on_soc = row.get("on_soc")
+        off_soc = row.get("off_soc")
+        enabled = row.get("enabled")
+        if enabled is not None:
+            enabled = bool(enabled)
+
+        try:
+            self._controller.set_rule(on_soc, off_soc, enabled)
+        except (TypeError, ValueError) as exc:
+            print(f"[relay-cloud] ignoring invalid rule settings: {exc}")
+            self._mark_config_applied(requested_at)
+            return False
+
+        print(f"[relay-cloud] applied rule: ON <= {on_soc}% / OFF >= {off_soc}%"
+              f" / {'enabled' if enabled else 'disabled'}")
+        self._mark_config_applied(requested_at)
+        self._publish_status()
+        return True
+
     def _note_error(self, message):
         if message != self._last_error:
             print(f"[relay-cloud] {message}")
             self._last_error = message
 
     def _sync_once(self):
+        try:
+            config = self._get_config()
+            self._config_missing = False
+            self._config_error = None
+            if config:
+                self._apply_config(config)
+        except requests.RequestException as exc:
+            status = exc.response.status_code if getattr(exc, "response", None) is not None else None
+            if status == 404:
+                # Older deployments do not have relay_config yet; keep the
+                # command/status path working and log this only once.
+                if not self._config_missing:
+                    self._config_missing = True
+                    print("[relay-cloud] relay_config missing "
+                          "(run supabase/relay.sql to edit rules online)")
+            else:
+                message = f"relay_config: {exc}"
+                if message != self._config_error:
+                    print(f"[relay-cloud] {message}")
+                    self._config_error = message
+
         row = self._get_command()
         if row:
             self._apply_command(row)

@@ -50,6 +50,16 @@ _HTTP_TIMEOUT = 5.0
 _STATE_TTL = 5.0            # seconds a fetched relay state stays valid
 
 
+def _valid_rule(on_soc, off_soc):
+    """True when the pair is a usable hysteresis rule."""
+    try:
+        on = float(on_soc)
+        off = float(off_soc)
+    except (TypeError, ValueError):
+        return False
+    return 0.0 <= on < off <= 100.0
+
+
 class SonoffController:
     """Hysteretic SOC controller for the grid-control relay."""
 
@@ -68,8 +78,12 @@ class SonoffController:
         self._reachable = None      # True | False | None (not polled yet)
         self._error = None
 
-        # Automation state
+        # Automation state. Thresholds start from the environment but can be
+        # changed at runtime (and are persisted in sonoff_state.json).
         self._auto = True
+        self._on_soc = float(SONOFF_ON_SOC)
+        self._off_soc = float(SONOFF_OFF_SOC)
+        self._settings_changed_at = 0.0
         self._manual_until = 0.0
         self._last_action = None
         self._last_action_ts = 0.0
@@ -105,13 +119,25 @@ class SonoffController:
         except (OSError, ValueError):
             return
         self._auto = bool(data.get("auto", True))
+        if _valid_rule(data.get("on_soc"), data.get("off_soc")):
+            self._on_soc = float(data["on_soc"])
+            self._off_soc = float(data["off_soc"])
+        changed = data.get("settings_changed_at")
+        if isinstance(changed, (int, float)) and changed > 0:
+            self._settings_changed_at = float(changed)
         action = data.get("last_action")
         if isinstance(action, dict):
             self._last_action = action
             self._last_action_ts = float(action.get("at") or 0.0)
 
     def _save_state(self):
-        payload = {"auto": self._auto, "last_action": self._last_action}
+        payload = {
+            "auto": self._auto,
+            "on_soc": self._on_soc,
+            "off_soc": self._off_soc,
+            "settings_changed_at": self._settings_changed_at,
+            "last_action": self._last_action,
+        }
         try:
             tmp = _STATE_FILE + ".tmp"
             with open(tmp, "w", encoding="utf-8") as fh:
@@ -211,13 +237,41 @@ class SonoffController:
                     self._manual_until = time.time() + SONOFF_MANUAL_HOLD_S
         return self.status()
 
-    def set_auto(self, enabled):
+    def set_rule(self, on_soc=None, off_soc=None, enabled=None):
+        """Change the SOC rule (thresholds and/or the enable switch).
+
+        Only supplied values change. Raises ValueError for an unusable pair so
+        the API can answer 400 instead of silently storing nonsense.
+        """
         with self._lock:
-            self._auto = bool(enabled)
-            if self._auto:
-                self._manual_until = 0.0
+            try:
+                on = self._on_soc if on_soc is None else float(on_soc)
+                off = self._off_soc if off_soc is None else float(off_soc)
+            except (TypeError, ValueError):
+                raise ValueError("Require 0 <= ON SOC < OFF SOC <= 100") from None
+        if not _valid_rule(on, off):
+            raise ValueError("Require 0 <= ON SOC < OFF SOC <= 100")
+        if enabled is not None and not isinstance(enabled, bool):
+            raise ValueError("enabled must be true or false")
+
+        with self._lock:
+            self._on_soc = on
+            self._off_soc = off
+            self._settings_changed_at = time.time()
+            if enabled is not None:
+                self._auto = enabled
+                if self._auto:
+                    self._manual_until = 0.0
         self._save_state()
         return self.status()
+
+    def settings_changed_at(self):
+        """Unix time of the last local rule change (used by relay_cloud)."""
+        with self._lock:
+            return self._settings_changed_at
+
+    def set_auto(self, enabled):
+        return self.set_rule(enabled=bool(enabled))
 
     # ------------------------------------------------------------------
     # Control loop
@@ -234,6 +288,8 @@ class SonoffController:
 
         now = time.time()
         with self._lock:
+            on_soc = self._on_soc
+            off_soc = self._off_soc
             self._last_soc = soc
             self._last_soc_ts = data_ts
 
@@ -248,10 +304,10 @@ class SonoffController:
         if state is None:
             return
 
-        if state == "off" and soc <= SONOFF_ON_SOC:
-            self._act("on", f"SOC {soc:g}% <= {SONOFF_ON_SOC:g}%")
-        elif state == "on" and soc >= SONOFF_OFF_SOC:
-            self._act("off", f"SOC {soc:g}% >= {SONOFF_OFF_SOC:g}%")
+        if state == "off" and soc <= on_soc:
+            self._act("on", f"SOC {soc:g}% <= {on_soc:g}%")
+        elif state == "on" and soc >= off_soc:
+            self._act("off", f"SOC {soc:g}% >= {off_soc:g}%")
 
     def _loop(self):
         # Evaluate once immediately, then on a fixed cadence. Exceptions are
@@ -293,8 +349,9 @@ class SonoffController:
                 "auto": self._auto,
                 "manual_until": self._manual_until or None,
                 "manual_hold_s": SONOFF_MANUAL_HOLD_S,
-                "on_soc": SONOFF_ON_SOC,
-                "off_soc": SONOFF_OFF_SOC,
+                "on_soc": self._on_soc,
+                "off_soc": self._off_soc,
+                "settings_changed_at": self._settings_changed_at or None,
                 "soc": self._last_soc,
                 "soc_age": (round(now - self._last_soc_ts, 1)
                             if self._last_soc_ts else None),

@@ -42,14 +42,33 @@ create table if not exists public.relay_status (
     updated_at  timestamptz
 );
 
+-- Rule settings are a separate command row: the website writes thresholds and
+-- the enable switch here; the local monitor applies them and publishes the
+-- resulting live values in relay_status.
+create table if not exists public.relay_config (
+    id            integer primary key default 1 check (id = 1),
+    on_soc        double precision not null default 8,
+    off_soc       double precision not null default 10,
+    enabled       boolean not null default true,
+    requested_at  timestamptz,
+    applied_at    timestamptz,
+    requested_by  text,
+    constraint relay_config_rule_valid check (
+        on_soc >= 0 and on_soc <= 100
+        and off_soc > on_soc and off_soc <= 100
+    )
+);
+
 insert into public.relay_control (id) values (1) on conflict (id) do nothing;
 insert into public.relay_status  (id) values (1) on conflict (id) do nothing;
+insert into public.relay_config  (id) values (1) on conflict (id) do nothing;
 
 -- ------------------------------------------------------------
 -- 2. Row level security
 -- ------------------------------------------------------------
 alter table public.relay_control enable row level security;
 alter table public.relay_status  enable row level security;
+alter table public.relay_config  enable row level security;
 
 -- Public can read the relay state (same information as the dashboard).
 drop policy if exists relay_status_read on public.relay_status;
@@ -74,6 +93,40 @@ grant select, update on public.relay_control to anon, authenticated;
 -- still needs GRANT), otherwise every poll fails with 403.
 grant all on public.relay_control to service_role;
 grant all on public.relay_status  to service_role;
+
+-- Rule settings: public read/write for the two thresholds and the enable
+-- switch. Column-level grants keep requested_at/applied_at monitor-only.
+drop policy if exists relay_config_read on public.relay_config;
+create policy relay_config_read on public.relay_config
+    for select to anon, authenticated using (true);
+
+drop policy if exists relay_config_write on public.relay_config;
+create policy relay_config_write on public.relay_config
+    for update to anon, authenticated using (true) with check (true);
+
+grant select on public.relay_config to anon, authenticated;
+revoke update on public.relay_config from anon, authenticated;
+grant update (on_soc, off_soc, enabled, requested_by)
+    on public.relay_config to anon, authenticated;
+grant all on public.relay_config to service_role;
+
+-- Timestamp the request server-side so a client cannot fake "newer" settings.
+-- Only settings-column updates touch requested_at; the monitor's applied_at
+-- patch does not, so applying a command cannot re-queue it.
+create or replace function public.relay_config_touch()
+returns trigger
+language plpgsql
+as $$
+begin
+    new.requested_at := now();
+    return new;
+end;
+$$;
+
+drop trigger if exists relay_config_touch on public.relay_config;
+create trigger relay_config_touch
+    before update of on_soc, off_soc, enabled on public.relay_config
+    for each row execute function public.relay_config_touch();
 
 -- ------------------------------------------------------------
 -- 3. Throttle: at most one accepted command per 3 seconds

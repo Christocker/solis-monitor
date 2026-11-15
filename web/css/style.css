@@ -459,13 +459,15 @@ body {
 
 .sonoff-main {
     display: flex;
+    flex-wrap: wrap;
     align-items: stretch;
-    gap: 18px;
-    margin-bottom: 18px;
+    gap: 14px;
+    margin-bottom: 14px;
 }
 
 .sonoff-btn {
-    flex: 0 0 118px;
+    flex: 1 1 104px;
+    min-width: 96px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -513,17 +515,18 @@ body {
 
 .sonoff-meta {
     display: flex;
-    flex: 1;
-    min-width: 0;
+    flex: 2 1 150px;
+    min-width: 150px;
     flex-direction: column;
     justify-content: center;
     gap: 9px;
 }
 .sonoff-row {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: baseline;
-    gap: 10px;
+    gap: 6px 10px;
     font-size: 12px;
     color: var(--text-tertiary);
 }
@@ -531,40 +534,141 @@ body {
     color: var(--text);
     font-weight: 600;
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    text-align: right;
     font-variant-numeric: tabular-nums;
 }
 
-.sonoff-foot {
+.sonoff-rule-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--hairline);
+}
+.sonoff-rule-fields {
+    display: flex;
+    flex: 1 1 190px;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    min-width: 0;
+}
+.sonoff-rule-fields label {
     display: flex;
     align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+.sonoff-rule-fields input {
+    width: 58px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--hairline-strong);
+    background: var(--surface-muted);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+.sonoff-rule-fields input:focus {
+    outline: 2px solid var(--grid);
+    outline-offset: 1px;
+}
+.sonoff-save {
+    flex: 0 0 auto;
+    margin-left: auto;
+    padding: 8px 14px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--grid);
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+.sonoff-save:disabled { opacity: 0.5; cursor: not-allowed; }
+.sonoff-save-msg {
+    flex: 1 1 100%;
+    min-height: 1em;
+    font-size: 11px;
+    color: var(--text-tertiary);
+}
+.sonoff-save-msg[data-error="true"] { color: var(--danger); }
+.sonoff-save-msg[data-ok="true"] { color: var(--battery); }
+
+.sonoff-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px 12px;
     border-top: 1px solid var(--hairline);
     padding-top: 14px;
+    margin-top: 14px;
+}
+.sonoff-auto {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    user-select: none;
+}
+.sonoff-auto input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+.sonoff-auto-track {
+    position: relative;
+    width: 34px;
+    height: 20px;
+    flex: 0 0 34px;
+    border-radius: var(--radius-pill);
+    background: var(--track);
+    border: 1px solid var(--hairline-strong);
+    transition: background 0.2s var(--ease), border-color 0.2s var(--ease);
+}
+.sonoff-auto-track::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    transition: transform 0.2s var(--ease), background 0.2s var(--ease);
+}
+.sonoff-auto input:checked + .sonoff-auto-track {
+    background: rgba(52, 199, 89, 0.2);
+    border-color: rgba(52, 199, 89, 0.45);
+}
+.sonoff-auto input:checked + .sonoff-auto-track::after {
+    transform: translateX(14px);
+    background: var(--battery);
+}
+.sonoff-auto input:focus-visible + .sonoff-auto-track {
+    outline: 2px solid var(--grid);
+    outline-offset: 2px;
 }
 .sonoff-last { font-size: 12px; color: var(--text-tertiary); text-align: right; }
-.sonoff-auto-pill {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    padding: 3px 8px;
-    border-radius: var(--radius-pill);
-    color: #1f9d45;
-    background: rgba(52, 199, 89, 0.12);
-    border: 1px solid rgba(52, 199, 89, 0.3);
-}
-.sonoff-auto-pill[data-off="true"] {
-    color: var(--text-tertiary);
-    background: var(--surface-muted);
-    border-color: var(--hairline);
+
+@media (min-width: 700px) {
+    #sonoff-card { grid-column: span 2; }
 }
 
 @media (max-width: 480px) {
-    .sonoff-btn { flex-basis: 104px; }
     .sonoff-row { font-size: 11px; }
+    .sonoff-rule-fields label { white-space: normal; }
 }
 
 .value-flash { animation: valuePop 0.35s var(--ease); }

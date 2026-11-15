@@ -360,22 +360,25 @@ async function getSyncStatus() {
 /* ---- Grid-control relay (public site, through the Supabase queue) ---- */
 // The site cannot reach the inverter or Home Assistant, so the button writes
 // an intent to relay_control; the local monitor applies it and publishes
-// relay_status back, which this card displays.
+// relay_status back, which this card displays. Rule edits use relay_config.
 const RELAY_STATUS_URL = SUPABASE_URL + "/rest/v1/relay_status?id=eq.1&select=*";
 const RELAY_CONTROL_URL = SUPABASE_URL + "/rest/v1/relay_control?id=eq.1";
-const RELAY_NAME = "MINIR4-Solis-Grid-Control";
+const RELAY_CONFIG_URL = SUPABASE_URL + "/rest/v1/relay_config?id=eq.1";
 
 let relayStatus = null;
 let relayBusy = false;
 let relayPending = null;
 let relayFetched = 0;
+let relaySettingsBusy = false;
+let relaySettingsPending = null;
+let relayQueued = null;
+let relayMsgTimer = null;
 
 async function fetchRelayStatus(force) {
     if (!force && Date.now() - relayFetched < 3000) return relayStatus;
     try {
-        const res = await fetch(RELAY_STATUS_URL, {
-            headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY },
-        });
+        const res = await supabaseFetch(
+            RELAY_STATUS_URL, { headers: supabaseHeaders() }, 8000);
         if (!res.ok) throw new Error("HTTP " + res.status);
         const rows = await res.json();
         relayStatus = (rows && rows[0]) || null;
@@ -393,12 +396,82 @@ function relayClock(iso) {
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+function relayRuleForm() {
+    return document.getElementById("sonoff-rule-form");
+}
+
+function relayRuleDirty() {
+    const form = relayRuleForm();
+    return !!(form && form.dataset.dirty === "true");
+}
+
+function markRelayRuleDirty() {
+    const form = relayRuleForm();
+    if (form) form.dataset.dirty = "true";
+}
+
+function clearRelayRuleDirty() {
+    const form = relayRuleForm();
+    if (form) delete form.dataset.dirty;
+}
+
+function showRelayMsg(text, isError, isOk) {
+    const el = document.getElementById("sonoff-save-msg");
+    if (!el) return;
+    el.textContent = text || "";
+    el.dataset.error = isError ? "true" : "false";
+    el.dataset.ok = isOk ? "true" : "false";
+    clearTimeout(relayMsgTimer);
+    if (isOk) {
+        relayMsgTimer = setTimeout(() => {
+            if (el.textContent === text) el.textContent = "";
+        }, 4000);
+    }
+}
+
+function relayRuleValues() {
+    const onEl = document.getElementById("sonoff-on-soc");
+    const offEl = document.getElementById("sonoff-off-soc");
+    if (!onEl || !offEl || onEl.value === "" || offEl.value === "") {
+        return { error: "Enter both SOC values." };
+    }
+    const on = Number(onEl.value);
+    const off = Number(offEl.value);
+    if (!Number.isFinite(on) || !Number.isFinite(off)) {
+        return { error: "SOC values must be numbers." };
+    }
+    if (on < 0 || on > 100 || off < 0 || off > 100) {
+        return { error: "SOC values must be between 0 and 100." };
+    }
+    if (on >= off) {
+        return { error: "OFF must be greater than ON." };
+    }
+    return { on: on, off: off };
+}
+
 function updateRelayUI() {
     const card = document.getElementById("sonoff-card");
     if (!card) return;
     const s = relayStatus;
     if (!s || (!s.state && !s.updated_at)) { card.hidden = true; return; }
     card.hidden = false;
+
+    // Keep showing a queued edit until the monitor publishes the same values
+    // (or the queue is old enough that we stop pretending it is pending).
+    if (relayQueued) {
+        const q = relayQueued;
+        const matched =
+            (q.on == null || (s.on_soc != null && Number(s.on_soc) === Number(q.on)))
+            && (q.off == null || (s.off_soc != null && Number(s.off_soc) === Number(q.off)))
+            && (q.enabled == null || !!s.auto === !!q.enabled);
+        if (matched) {
+            relayQueued = null;
+            clearRelayRuleDirty();
+        } else if (Date.now() > q.until) {
+            relayQueued = null;
+        }
+    }
+    const queued = relayQueued;
 
     const btn = document.getElementById("sonoff-btn");
     const label = document.getElementById("sonoff-label");
@@ -416,33 +489,154 @@ function updateRelayUI() {
     const soc = document.getElementById("sonoff-soc");
     if (soc) soc.textContent = s.soc == null ? NORMAL_DASH : Math.round(Number(s.soc)) + "%";
 
-    const rule = document.getElementById("sonoff-rule");
-    if (rule) {
-        rule.textContent = "ON \u2264 " + (s.on_soc ?? "--") + "% \u00b7 OFF \u2265 " + (s.off_soc ?? "--") + "%";
+    const onInput = document.getElementById("sonoff-on-soc");
+    const offInput = document.getElementById("sonoff-off-soc");
+    const form = relayRuleForm();
+    const dirty = relayRuleDirty();
+    const active = document.activeElement;
+    const shownOn = queued && queued.on != null ? queued.on : s.on_soc;
+    const shownOff = queued && queued.off != null ? queued.off : s.off_soc;
+    if (onInput && !dirty && !relaySettingsBusy && active !== onInput && shownOn != null) {
+        onInput.value = String(shownOn);
     }
+    if (offInput && !dirty && !relaySettingsBusy && active !== offInput && shownOff != null) {
+        offInput.value = String(shownOff);
+    }
+    if (form) form.hidden = shownOn == null || shownOff == null;
 
-    const pill = document.getElementById("sonoff-auto-pill");
-    if (pill) {
-        pill.dataset.off = s.auto ? "false" : "true";
-        pill.textContent = s.auto ? "AUTO" : "MANUAL";
+    const auto = document.getElementById("sonoff-auto-input");
+    if (auto) {
+        const shownAuto = queued && queued.enabled != null ? queued.enabled : s.auto;
+        auto.disabled = relaySettingsBusy || shownAuto == null;
+        if (!relaySettingsBusy && active !== auto) auto.checked = !!shownAuto;
     }
+    const saveBtn = document.getElementById("sonoff-save");
+    if (saveBtn) saveBtn.disabled = relaySettingsBusy;
 
     const ageSec = s.updated_at ? (Date.now() - Date.parse(s.updated_at)) / 1000 : null;
     const last = document.getElementById("sonoff-last");
     if (last) {
         if (relayPending) {
             last.textContent = "Sending " + relayPending.toUpperCase() + "\u2026";
+        } else if (relaySettingsPending) {
+            last.textContent = "Saving rule\u2026";
+        } else if (queued) {
+            last.textContent = "Change queued \u00b7 waiting for laptop";
+            last.title = "Saved in Supabase; the local monitor will apply it when it is online.";
+        } else if (!s.auto) {
+            last.textContent = "Rule off \u00b7 manual control";
+            last.title = "SOC automation is disabled; the relay stays where you set it.";
         } else if (ageSec != null && ageSec > 120) {
             last.textContent = "Monitor offline \u00b7 " + relayClock(s.updated_at);
+            last.title = "";
         } else if (s.last_action && s.last_action.at) {
             const a = s.last_action;
-            last.textContent = (a.action === "on" ? "On" : "Off") + " \u00b7 " + relayClock(new Date(a.at * 1000).toISOString()) +
+            last.textContent = (a.action === "on" ? "On" : "Off") + " \u00b7 " +
+                relayClock(new Date(a.at * 1000).toISOString()) +
                 (a.soc != null ? " \u00b7 " + Math.round(a.soc) + "%" : "");
             last.title = a.reason || "";
         } else {
             last.textContent = s.auto ? "Waiting for thresholds" : "Auto off";
             last.title = "";
         }
+    }
+}
+
+async function relayPatchConfig(payload) {
+    const res = await supabaseFetch(RELAY_CONFIG_URL, {
+        method: "PATCH",
+        headers: { ...supabaseHeaders(), Prefer: "return=minimal" },
+        body: JSON.stringify(payload),
+    }, 8000);
+    if (res.ok) return;
+    let text = "";
+    try { text = await res.text(); } catch (e) { /* ignore */ }
+    if (res.status === 404) {
+        throw new Error("Rule settings need supabase/relay.sql");
+    }
+    if (text.includes("relay_config_rule_valid") || text.includes("check constraint")) {
+        throw new Error("OFF must be greater than ON");
+    }
+    throw new Error("HTTP " + res.status);
+}
+
+async function waitForRelaySettings(want, timeoutMs = 12000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const s = await fetchRelayStatus(true);
+        if (!s) continue;
+        const onOk = want.on == null
+            || (s.on_soc != null && Number(s.on_soc) === Number(want.on));
+        const offOk = want.off == null
+            || (s.off_soc != null && Number(s.off_soc) === Number(want.off));
+        const enabledOk = want.enabled == null || !!s.auto === !!want.enabled;
+        if (onOk && offOk && enabledOk) return true;
+    }
+    return false;
+}
+
+async function relaySaveSettings(ev) {
+    ev.preventDefault();
+    if (relaySettingsBusy) return;
+    const vals = relayRuleValues();
+    if (vals.error) { showRelayMsg(vals.error, true, false); return; }
+
+    relaySettingsBusy = true;
+    relaySettingsPending = { on: vals.on, off: vals.off };
+    updateRelayUI();
+    showRelayMsg("Saving\u2026", false, false);
+    try {
+        await relayPatchConfig({
+            on_soc: vals.on,
+            off_soc: vals.off,
+            requested_by: "web",
+        });
+        const ok = await waitForRelaySettings({ on: vals.on, off: vals.off });
+        if (ok) {
+            clearRelayRuleDirty();
+            relayQueued = null;
+            showRelayMsg("Saved", false, true);
+        } else {
+            relayQueued = { on: vals.on, off: vals.off, until: Date.now() + 120000 };
+            showRelayMsg("Change queued \u2014 laptop offline or slow", false, false);
+        }
+    } catch (err) {
+        showRelayMsg(err.message, true, false);
+    } finally {
+        relaySettingsBusy = false;
+        relaySettingsPending = null;
+        await fetchRelayStatus(true);
+        updateRelayUI();
+    }
+}
+
+async function relaySetEnabled(enabled) {
+    if (relaySettingsBusy) return;
+    relaySettingsBusy = true;
+    relaySettingsPending = { enabled: enabled };
+    updateRelayUI();
+    showRelayMsg(enabled ? "Enabling rule\u2026" : "Disabling rule\u2026", false, false);
+    try {
+        await relayPatchConfig({ enabled: enabled, requested_by: "web" });
+        const ok = await waitForRelaySettings({ enabled: enabled });
+        if (ok) {
+            relayQueued = null;
+            showRelayMsg(enabled ? "Rule enabled" : "Rule disabled \u00b7 manual control",
+                         false, !enabled);
+        } else {
+            relayQueued = { enabled: enabled, until: Date.now() + 120000 };
+            showRelayMsg("Change queued \u2014 laptop offline or slow", false, false);
+        }
+    } catch (err) {
+        showRelayMsg(err.message, true, false);
+        const auto = document.getElementById("sonoff-auto-input");
+        if (auto) auto.checked = !enabled;
+    } finally {
+        relaySettingsBusy = false;
+        relaySettingsPending = null;
+        await fetchRelayStatus(true);
+        updateRelayUI();
     }
 }
 
@@ -460,20 +654,15 @@ async function relayToggle() {
     updateRelayUI();
 
     try {
-        const res = await fetch(RELAY_CONTROL_URL, {
+        const res = await supabaseFetch(RELAY_CONTROL_URL, {
             method: "PATCH",
-            headers: {
-                apikey: SUPABASE_ANON_KEY,
-                Authorization: "Bearer " + SUPABASE_ANON_KEY,
-                "Content-Type": "application/json",
-                Prefer: "return=minimal",
-            },
+            headers: { ...supabaseHeaders(), Prefer: "return=minimal" },
             body: JSON.stringify({
                 desired_state: want,
                 requested_at: new Date().toISOString(),
                 requested_by: "web",
             }),
-        });
+        }, 8000);
         if (!res.ok) {
             const text = await res.text();
             throw new Error(text.includes("throttled")
@@ -500,6 +689,23 @@ async function relayToggle() {
 
 const relayBtn = document.getElementById("sonoff-btn");
 if (relayBtn) relayBtn.addEventListener("click", relayToggle);
+
+const relayForm = document.getElementById("sonoff-rule-form");
+if (relayForm) {
+    relayForm.addEventListener("submit", relaySaveSettings);
+    ["sonoff-on-soc", "sonoff-off-soc"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("input", () => {
+            markRelayRuleDirty();
+            showRelayMsg("", false, false);
+        });
+    });
+}
+
+const relayAutoInput = document.getElementById("sonoff-auto-input");
+if (relayAutoInput) {
+    relayAutoInput.addEventListener("change", () => relaySetEnabled(relayAutoInput.checked));
+}
 
 let pollBusy = false;
 let anyError = false;

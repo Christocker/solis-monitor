@@ -240,14 +240,18 @@ battery SOC (the value the dashboard shows, not a second SOC source):
 | SOC >= `SONOFF_OFF_SOC` (10 %) and relay ON | turn OFF |
 | in between | hold position (hysteresis) |
 
+The two thresholds and the **Rule** switch are editable from both the local
+dashboard and the hosted site. The switch disables SOC automation completely,
+so you can set the relay manually and it will stay there. Saved values persist
+in `sonoff_state.json`; the environment values are only first-run defaults.
+
 Safety rules: stale data (poller offline) means *no action*, never a blind
 switch; at least 60 s between relay actions; the dashboard button overrides
 automation for `SONOFF_MANUAL_HOLD_S` (30 min, then auto resumes).
 
 It drives the relay through Home Assistant, because the MINIR4 is paired
 there. Set a long-lived token in `.env` (`SONOFF_HA_TOKEN`) plus
-`SONOFF_ENTITY`. The button only exists on the local dashboard — the hosted
-Vercel site has no backend and cannot switch anything.
+`SONOFF_ENTITY`.
 
 ## Public relay control (hosted website)
 
@@ -259,16 +263,19 @@ website --PATCH--> relay_control --polled by--> local monitor --> HA
 website <--SELECT-- relay_status <--written by-- local monitor
 ```
 
-- `supabase/relay.sql` creates both tables, RLS and a 3 s throttle. Run it
-  once in the SQL editor.
+- `supabase/relay.sql` creates the command tables, RLS, the 3 s command
+  throttle, and the `relay_config` rule-settings row. Run it once in the SQL
+  editor (idempotent).
 - `relay_status` is public read (it mirrors the dashboard). `relay_control`
-  is **public write**: the hosted button has no login, so the anon key in the
-  page can queue ON/OFF. Anyone who finds the site can toggle the charger.
-  The 3 s throttle limits spam; turning ON asks for one confirming tap.
-- `dashboard_app/relay_cloud.py` polls every 2 s, applies the command through
-  the same `SonoffController.manual()` path as the button (30 min auto hold),
-  and publishes the result. Commands older than 5 minutes are dropped, never
-  replayed.
+  and `relay_config` are **public write**: the hosted card has no login, so
+  the anon key in the page can queue ON/OFF, change the thresholds, or disable
+  the rule. Anyone who finds the site can do this. The 3 s throttle limits
+  command spam; the controller's 60 s action gap limits relay chatter.
+- `dashboard_app/relay_cloud.py` polls every 2 s, applies commands through the
+  same `SonoffController.manual()` / `set_rule()` paths as the dashboard, and
+  publishes the result. Commands older than 5 minutes are dropped, never
+  replayed; rule settings are last-write-wins.
+- Turning ON asks for one confirming tap. Turning OFF is immediate.
 
 Latency is ~2-4 s (queue poll), not instant.
 

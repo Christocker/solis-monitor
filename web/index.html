@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Dashboard — Solis Monitor</title>
-    <link rel="stylesheet" href="css/style.css?v=20261103a">
+    <link rel="stylesheet" href="css/style.css?v=20261115a">
 </head>
 <body>
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
@@ -229,13 +229,23 @@
                         <span id="sonoff-label">--</span>
                     </button>
                     <div class="sonoff-meta">
-                        <div class="sonoff-row"><span>Relay</span><b id="sonoff-name">MINIR4</b></div>
                         <div class="sonoff-row"><span>Battery SOC</span><b id="sonoff-soc">--</b></div>
-                        <div class="sonoff-row"><span>Rule</span><b id="sonoff-rule">ON &le; -- &middot; OFF &ge; --</b></div>
                     </div>
                 </div>
+                <form class="sonoff-rule-form" id="sonoff-rule-form" autocomplete="off">
+                    <div class="sonoff-rule-fields">
+                        <label for="sonoff-on-soc">ON when SOC &le; <input id="sonoff-on-soc" type="number" min="0" max="100" step="1" inputmode="numeric"> %</label>
+                        <label for="sonoff-off-soc">OFF when SOC &ge; <input id="sonoff-off-soc" type="number" min="0" max="100" step="1" inputmode="numeric"> %</label>
+                    </div>
+                    <button type="submit" class="sonoff-save" id="sonoff-save">Save</button>
+                    <span class="sonoff-save-msg" id="sonoff-save-msg" role="status"></span>
+                </form>
                 <div class="sonoff-foot">
-                    <span class="sonoff-auto-pill" id="sonoff-auto-pill">AUTO</span>
+                    <label class="sonoff-auto" for="sonoff-auto-input">
+                        <input type="checkbox" id="sonoff-auto-input" checked>
+                        <span class="sonoff-auto-track" aria-hidden="true"></span>
+                        <span>Rule</span>
+                    </label>
                     <span class="sonoff-last" id="sonoff-last">--</span>
                 </div>
             </section>
@@ -408,8 +418,8 @@
         <a href="system.html" class="tab-link" aria-label="System"><svg aria-hidden="true" focusable="false"><use href="#i-gear"/></svg><span>System</span></a>
     </nav>
 
-<script src="config.js?v=20261103a"></script>
-<script src="js/common.js?v=20261103a"></script>
-<script src="js/dashboard.js?v=20261103a"></script>
+<script src="config.js?v=20261115a"></script>
+<script src="js/common.js?v=20261115a"></script>
+<script src="js/dashboard.js?v=20261115a"></script>
 </body>
 </html>
