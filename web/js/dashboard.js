@@ -839,7 +839,7 @@ async function refreshEnergy() {
 const CO2_KG_PER_KWH = 0.7;
 const CO2_KG_PER_TREE_YEAR = 21.0;
 const LIFETIME_CACHE_KEY = "lifetimeEnergy:v3";
-const LIFETIME_TTL_MS = 5 * 60 * 1000;
+const LIFETIME_TTL_MS = 0;
 const LIFETIME_ESTIMATE_TTL_MS = 0;
 
 function co2Field(solarKwh) {
