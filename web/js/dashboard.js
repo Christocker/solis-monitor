@@ -606,6 +606,7 @@ async function relaySaveSettings(ev) {
     } finally {
         relaySettingsBusy = false;
         relaySettingsPending = null;
+        updateRelayUI();
         await fetchRelayStatus(true);
         updateRelayUI();
     }
@@ -635,6 +636,7 @@ async function relaySetEnabled(enabled) {
     } finally {
         relaySettingsBusy = false;
         relaySettingsPending = null;
+        updateRelayUI();
         await fetchRelayStatus(true);
         updateRelayUI();
     }
