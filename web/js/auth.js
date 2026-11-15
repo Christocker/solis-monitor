@@ -173,8 +173,13 @@ async function authLogout() {
         } catch (e) { /* ignore */ }
     }
     clearAuth();
-    try { localStorage.removeItem("solis:last"); } catch (e) { /* ignore */ }
-    try { localStorage.removeItem("lifetimeEnergy:v1"); } catch (e) { /* ignore */ }
+    try {
+        Object.keys(localStorage).forEach((k) => {
+            if (k === "solis:last" || k.indexOf("lifetimeEnergy:") === 0) {
+                localStorage.removeItem(k);
+            }
+        });
+    } catch (e) { /* ignore */ }
     try {
         Object.keys(sessionStorage).forEach((k) => {
             if (k.indexOf("hist:") === 0) sessionStorage.removeItem(k);
