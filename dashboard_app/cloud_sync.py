@@ -319,6 +319,8 @@ class CloudSyncer:
                 print(" Cloud sync: lifetime stats published.")
                 self._lifetime_missing = False
         except requests.RequestException as exc:
+            # Retry soon: the table may be created while the service is up.
+            self._last_lifetime = now - ENERGY_INTERVAL + 30
             if not self._lifetime_missing:
                 self._lifetime_missing = True
                 print(" Cloud sync: lifetime_stats table unavailable "
